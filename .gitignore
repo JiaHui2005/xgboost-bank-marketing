@@ -1,0 +1,40 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# OS and IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Raw datasets
+data/raw/
+
+# Generated prediction outputs
+data/processed/predictions.csv
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/

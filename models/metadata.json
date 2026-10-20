@@ -1,0 +1,19 @@
+{
+    "model_type": "XGBClassifier",
+    "threshold": 0.2,
+    "target_mapping": {
+        "no": 0,
+        "yes": 1
+    },
+    "dropped_features": [
+        "duration"
+    ],
+    "validation_metrics": {
+        "accuracy": 0.8733757257395631,
+        "precision": 0.4655511811023622,
+        "recall": 0.5591016548463357,
+        "f1": 0.5080558539205156,
+        "roc_auc": 0.8082660159193288,
+        "pr_auc": 0.4739944794092244
+    }
+}
