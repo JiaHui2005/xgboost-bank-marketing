@@ -34,6 +34,10 @@ data/raw/
 # Generated prediction outputs
 data/processed/predictions.csv
 
+# Generated prediction outputs
+data/processed/predictions.csv
+data/processed/model_comparison.csv
+
 # Python build artifacts
 build/
 dist/
