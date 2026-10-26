@@ -27,6 +27,12 @@ class ModelEvaluator:
         y_true = np.asarray(y_true)
         y_proba = np.asarray(y_proba)
 
+        if y_true.ndim != 1:
+            raise ValueError("y_true must be a one-dimensional binary label array")
+
+        if not np.isin(y_true, [0, 1]).all():
+            raise ValueError("y_true labels must contain only 0 and 1")
+
         if len(y_true) != len(y_proba):
             raise ValueError("y_true and y_proba must have the same length")
 

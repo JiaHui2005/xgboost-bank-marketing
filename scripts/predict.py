@@ -24,7 +24,6 @@ REQUIRED_COLUMNS = [
     "contact",
     "day",
     "month",
-    "campaign",
     "pdays",
     "previous",
     "poutcome",
@@ -34,7 +33,6 @@ NUMERICAL_COLUMNS = [
     "age",
     "balance",
     "day",
-    "campaign",
     "pdays",
     "previous",
 ]
@@ -77,6 +75,21 @@ def load_artifacts():
             "Metadata threshold must be a finite number between 0 and 1."
         )
 
+    model_features = getattr(pipeline, "feature_names_in_", None)
+    metadata_dropped_features = metadata.get("dropped_features")
+    if isinstance(metadata_dropped_features, list):
+        model_uses_campaign = "campaign" not in metadata_dropped_features
+    else:
+        model_uses_campaign = (
+            model_features is not None and "campaign" in model_features
+        )
+    if model_uses_campaign:
+        raise RuntimeError(
+            "The saved model uses the 'campaign' feature, which is unavailable "
+            "before a campaign. Retrain the model without this feature before "
+            "running pre-campaign predictions."
+        )
+
     return pipeline, metadata
 
 
@@ -97,18 +110,10 @@ def validate_input_data(df: pd.DataFrame) -> None:
             f"Input CSV is missing required columns: {missing_columns}"
         )
 
-    # Check missing values in the required model features.
+    # Missing feature values are imputed by the fitted model pipeline.
     feature_df = df[REQUIRED_COLUMNS]
-    missing_values = feature_df.columns[
-        feature_df.isnull().any()
-    ].tolist()
 
-    if missing_values:
-        raise ValueError(
-            f"Input CSV contains missing values in columns: {missing_values}"
-        )
-
-    # Validate numerical features.
+    # Validate numerical features while allowing NaN for pipeline imputation.
     for column in NUMERICAL_COLUMNS:
         try:
             numeric_values = pd.to_numeric(
@@ -120,9 +125,10 @@ def validate_input_data(df: pd.DataFrame) -> None:
                 f"Column '{column}' must contain numerical values."
             ) from exc
 
-        if not np.isfinite(numeric_values.to_numpy(dtype=float)).all():
+        numeric_array = numeric_values.to_numpy(dtype=float, na_value=np.nan)
+        if np.isinf(numeric_array).any():
             raise ValueError(
-                f"Column '{column}' contains infinite or non-finite values."
+                f"Column '{column}' contains infinite values."
             )
 
     # Validate categorical features.
@@ -133,6 +139,8 @@ def validate_input_data(df: pd.DataFrame) -> None:
     ]
 
     for column in categorical_columns:
+        if feature_df[column].isna().all():
+            continue
         if not (
             pd.api.types.is_object_dtype(feature_df[column])
             or isinstance(feature_df[column].dtype, pd.CategoricalDtype)

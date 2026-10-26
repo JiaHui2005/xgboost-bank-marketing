@@ -3,12 +3,13 @@ from pathlib import Path
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.data_loader import DataLoader
+from src.data_loader import DataLoader, encode_binary_target
 from src.model_evaluator import ModelEvaluator
 from src.model_trainer import ModelTrainer
 
@@ -26,7 +27,7 @@ def load_and_split_data():
     df = df.drop(columns=["duration"])
 
     X = df.drop(columns=["y"])
-    y = df["y"].map({"no": 0, "yes": 1})
+    y = encode_binary_target(df["y"])
 
     X_train_val, X_test, y_train_val, y_test = train_test_split(
         X,
@@ -52,20 +53,38 @@ def build_preprocessor(X_train, scale_numeric=False):
     categorical_columns = X_train.select_dtypes(
         include=["object", "category", "string"]
     ).columns.tolist()
+    categorical_columns = [
+        column for column in categorical_columns if column != "campaign"
+    ]
 
     numerical_columns = X_train.select_dtypes(
         include=["number"]
     ).columns.tolist()
+    numerical_columns = [
+        column for column in numerical_columns if column != "campaign"
+    ]
 
-    numerical_transformer = (
-        StandardScaler() if scale_numeric else "passthrough"
+    categorical_transformer = Pipeline(
+        steps=[
+            (
+                "imputer",
+                SimpleImputer(strategy="constant", fill_value="__missing__"),
+            ),
+            ("encoder", OneHotEncoder(handle_unknown="ignore")),
+        ]
     )
+    numerical_steps = [
+        ("imputer", SimpleImputer(strategy="median", keep_empty_features=True))
+    ]
+    if scale_numeric:
+        numerical_steps.append(("scaler", StandardScaler()))
+    numerical_transformer = Pipeline(steps=numerical_steps)
 
     return ColumnTransformer(
         transformers=[
             (
                 "categorical",
-                OneHotEncoder(handle_unknown="ignore"),
+                categorical_transformer,
                 categorical_columns,
             ),
             (
@@ -132,7 +151,9 @@ def evaluate_model(name, model, X, y):
 
 
 def main():
-    X_train, X_val, X_test, y_train, y_val, y_test = load_and_split_data()
+    # The test split is intentionally discarded here. It is reserved for a
+    # single final evaluation after model and threshold choices are locked.
+    X_train, X_val, _, y_train, y_val, _ = load_and_split_data()
     models = build_models(X_train)
 
     results = []
@@ -143,9 +164,6 @@ def main():
 
         validation_result = evaluate_model(name, model, X_val, y_val)
         results.append({"split": "validation", **validation_result})
-
-        test_result = evaluate_model(name, model, X_test, y_test)
-        results.append({"split": "test", **test_result})
 
     results_df = pd.DataFrame(results)
 

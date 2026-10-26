@@ -65,6 +65,30 @@ def test_model_trainer_fit_and_predict(sample_data):
     assert np.all((probabilities >= 0) & (probabilities <= 1))
 
 
+def test_model_trainer_predicts_when_categorical_and_numeric_values_are_missing(
+    sample_data,
+):
+    X, y = sample_data
+    X = X.copy()
+    X.loc[0, "job"] = None
+    X.loc[1, "age"] = np.nan
+
+    trainer = ModelTrainer(
+        preprocessor=DataPreprocessor(
+            categorical_columns=["job"],
+            numerical_columns=["age"],
+        ),
+        model_params={"n_estimators": 10, "max_depth": 2},
+    )
+    trainer.fit(X, y)
+
+    probabilities = trainer.predict_proba(X.iloc[:2])
+
+    assert probabilities.shape == (2,)
+    assert np.isfinite(probabilities).all()
+    assert np.all((probabilities >= 0) & (probabilities <= 1))
+
+
 def test_model_trainer_predict_before_fit_raises_error(sample_data):
     preprocessor = DataPreprocessor(
         categorical_columns=["job"],

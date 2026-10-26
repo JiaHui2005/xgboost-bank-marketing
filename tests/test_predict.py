@@ -38,6 +38,17 @@ def test_validate_input_data_accepts_valid_dataframe():
     validate_input_data(df)
 
 
+def test_validate_input_data_does_not_require_campaign_before_campaign():
+    df = create_valid_dataframe()
+
+    assert "campaign" not in REQUIRED_COLUMNS
+    validate_input_data(df)
+
+    # The source CSV may contain this post-campaign field; it is ignored.
+    df["campaign"] = [3]
+    validate_input_data(df)
+
+
 def test_validate_input_data_rejects_empty_dataframe():
     df = pd.DataFrame(columns=REQUIRED_COLUMNS)
 
@@ -58,15 +69,12 @@ def test_validate_input_data_rejects_missing_columns():
         validate_input_data(df)
 
 
-def test_validate_input_data_rejects_missing_values():
+def test_validate_input_data_allows_missing_values_for_pipeline_imputation():
     df = create_valid_dataframe()
     df.loc[0, "age"] = None
+    df.loc[0, "job"] = None
 
-    with pytest.raises(
-        ValueError,
-        match="Input CSV contains missing values",
-    ):
-        validate_input_data(df)
+    validate_input_data(df)
 
 
 def test_validate_input_data_allows_extra_columns():
@@ -95,7 +103,7 @@ def test_validate_input_data_rejects_infinite_values():
 
     with pytest.raises(
         ValueError,
-        match="contains infinite or non-finite values",
+        match="contains infinite values",
     ):
         validate_input_data(df)
 
@@ -200,4 +208,48 @@ def test_load_artifacts_rejects_non_object_metadata(
             ValueError,
             match="Metadata must be a JSON object",
         ):
+            predict_module.load_artifacts()
+
+
+def test_load_artifacts_rejects_model_trained_with_campaign(
+    tmp_path,
+    monkeypatch,
+):
+    model_path = tmp_path / "fake_model.joblib"
+    model_path.write_bytes(b"fake")
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(json.dumps({"threshold": 0.2}), encoding="utf-8")
+
+    monkeypatch.setattr(predict_module, "MODEL_PATH", model_path)
+    monkeypatch.setattr(predict_module, "METADATA_PATH", metadata_path)
+
+    class LegacyPipeline:
+        feature_names_in_ = ["age", "campaign"]
+
+    with patch.object(
+        predict_module.joblib,
+        "load",
+        return_value=LegacyPipeline(),
+    ):
+        with pytest.raises(RuntimeError, match="Retrain the model"):
+            predict_module.load_artifacts()
+
+
+def test_load_artifacts_rejects_metadata_for_model_using_campaign(
+    tmp_path,
+    monkeypatch,
+):
+    model_path = tmp_path / "fake_model.joblib"
+    model_path.write_bytes(b"fake")
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps({"threshold": 0.2, "dropped_features": ["duration"]}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(predict_module, "MODEL_PATH", model_path)
+    monkeypatch.setattr(predict_module, "METADATA_PATH", metadata_path)
+
+    with patch.object(predict_module.joblib, "load", return_value=object()):
+        with pytest.raises(RuntimeError, match="Retrain the model"):
             predict_module.load_artifacts()

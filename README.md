@@ -103,11 +103,11 @@ The dataset contains customer demographic information, financial information, an
 
 
 
-The `duration` feature is excluded from model training because it represents the duration of the last contact with a customer.
+The `duration` feature is excluded because it is only known after a call. The `campaign` feature is also excluded: it counts contacts in the current campaign, including the last contact, and is not available when customers are classified before the campaign.
 
 
 
-This information is generally unavailable before a marketing call. Including it could introduce target leakage and make the model less representative of a real-world prediction scenario.
+Using either feature would leak information unavailable at the pre-campaign prediction point and make the model less representative of deployment.
 
 
 
@@ -374,119 +374,23 @@ The current XGBoost configuration includes:
 
 
 
-The preprocessing pipeline handles numerical and categorical features before passing them to the classifier.
+The preprocessing pipeline imputes numerical missing values with the training-split median and categorical missing values with a dedicated `__missing__` category before encoding. Imputation is fitted within each model pipeline, so validation/test rows do not influence the imputation statistics. Unknown categorical values remain supported by one-hot encoding. Target labels are validated as exactly `no` or `yes` before mapping to `0`/`1`.
 
 
 
 ## Model Performance
 
+The project uses validation data for model and threshold decisions. The test split is reserved for one final evaluation after those decisions are locked. The classification threshold currently used by the training workflow is `0.20`.
 
+The README previously reported test-set metrics for multiple candidate models and used them to support a model comparison. That exposed the test results to model selection; those historical numbers are therefore withdrawn as an unbiased final estimate. The checked-in split is no longer a pristine holdout. For a defensible final estimate, establish a fresh holdout (preferably a later time period) after model and threshold choices are fixed.
 
-The model was evaluated on separate validation and test sets. The reported results use a classification threshold of `0.20`.
-
-
-
-### Evaluation Results
-
-
-
-| Metric | Validation | Test |
-| --- | --- | --- |
-| Accuracy | 0.8734 | 0.8747 |
-| Precision | 0.4656 | 0.4683 |
-| Recall | 0.5591 | 0.5236 |
-| F1-score | 0.5081 | 0.4944 |
-| ROC-AUC | 0.8083 | 0.8097 |
-| Average Precision (PR-AUC label in the implementation) | 0.4740 | 0.4710 |
-
-
-
-
-The PR-AUC values above are produced by scikit-learn's `average_precision_score`, which calculates Average Precision.
-
-
-
-### Test Confusion Matrix
-
-
-
-At the configured threshold of `0.20`, the test confusion matrix is:
-
-
-
-| Actual / Predicted | No | Yes |
-| --- | --- | --- |
-| No | 7,356 | 629 |
-| Yes | 504 | 554 |
-
-
-
-
-The model correctly identified 554 actual subscribers and 7,356 non-subscribers in the test set.
-
-
-
-### Interpretation
-
-
-
-- **ROC-AUC of 0.8097:** The model demonstrates useful discrimination between the two target classes.
-
-- **Recall of 0.5236:** The model identified approximately 52.36% of actual subscribers in the test set.
-
-- **Precision of 0.4683:** Approximately 46.83% of positive predictions corresponded to actual subscribers.
-
-- **F1-score of 0.4944:** This reflects the balance between precision and recall at the configured threshold.
-
-
-
-Accuracy should not be considered in isolation because the dataset contains more non-subscribers than subscribers.
-
-
-
-The classification threshold affects precision, recall, F1-score, accuracy, and the confusion matrix. ROC-AUC and Average Precision are calculated from predicted probabilities rather than thresholded labels.
-
-
-
-### Why ROC-AUC Matters — and When F1-score Matters
-
-ROC-AUC measures how well a model ranks positive examples above negative examples across possible classification thresholds. It is useful for comparing a model's discrimination without committing to one particular threshold.
-
-In this experiment, XGBoost achieved a test ROC-AUC of `0.8097`, compared with `0.7718` for Logistic Regression. This suggests that XGBoost ranks subscribers above non-subscribers more effectively across thresholds on this test set.
-
-ROC-AUC is **not universally better** than F1-score or other metrics:
-
-- **ROC-AUC** is useful for comparing ranking/discrimination across thresholds.
-- **Precision and recall** are important when false positives and false negatives have different business costs.
-- **F1-score** balances precision and recall at a specific classification threshold.
-- **Average Precision** summarizes precision-recall performance and is particularly informative when the positive class is relatively uncommon.
-- **Accuracy** measures overall correctness, but can be misleading when class distribution is imbalanced.
-
-For a bank marketing campaign, the preferred metric depends on the business objective. Recall may be important if the goal is to identify as many likely subscribers as possible; precision may matter more if contacting unlikely subscribers is costly. ROC-AUC helps compare ranking performance, while threshold-dependent metrics help select an operating point. The current threshold of `0.20` is used for reporting; this README does not claim that it was optimized on the validation set.
-
-These results provide a baseline for further experiments with threshold selection, class imbalance handling, and alternative models.
+Choose metrics according to campaign costs: precision and recall describe different error tradeoffs; F1 balances them at a chosen threshold; ROC-AUC and Average Precision assess ranking across thresholds. Accuracy alone is insufficient for the imbalanced target. The fixed threshold should be selected using validation data and an explicit business objective, not the test set.
 
 
 
 ## Baseline Comparison
 
-XGBoost was compared with Logistic Regression as a baseline. Both models used the same stratified train/validation/test split, target definition, and fixed classification threshold of `0.20`. Categorical features were one-hot encoded; Logistic Regression additionally used standard scaling for numerical features.
-
-### Test Results
-
-| Metric | XGBoost | Logistic Regression |
-| --- | --- | --- |
-| Accuracy | 0.8747 | 0.8747 |
-| Precision | 0.4683 | 0.4628 |
-| Recall | 0.5236 | 0.4405 |
-| F1-score | 0.4944 | 0.4513 |
-| ROC-AUC | 0.8097 | 0.7718 |
-| Average Precision | 0.4710 | 0.4114 |
-
-
-XGBoost achieved higher Recall, F1-score, ROC-AUC, and Average Precision on the test set. Its ROC-AUC was higher by `0.0379`, and Recall was higher by `0.0831` (8.31 percentage points) at the fixed threshold. Both models had the same Accuracy (`0.8747`), showing why accuracy alone does not fully describe performance on this imbalanced dataset.
-
-Based on this experiment, XGBoost is the stronger candidate of the two evaluated models. This conclusion is limited to the current data split, configurations, and threshold; further testing is needed to assess stability and threshold choices.
+XGBoost and Logistic Regression are compared on the same stratified training and validation split, using the same target and fixed threshold. Categorical features are one-hot encoded; Logistic Regression additionally scales numerical features. Candidate ranking must be based on validation metrics only. No test metrics are produced by the comparison script.
 
 ### Reproduce the Comparison
 
@@ -496,7 +400,7 @@ Run the following command from the project root:
 uv run python scripts/compare_models.py
 ```
 
-The script trains both models, reports validation and test metrics, and saves the results to `data/processed/model_comparison.csv`.
+The script trains both models, reports validation metrics only, and saves them to `data/processed/model_comparison.csv`. The test split is discarded without prediction or scoring.
 
 The threshold is held fixed at `0.20` for this comparison. It should not be described as optimized unless a separate validation-based threshold-selection experiment has been performed.
 
@@ -522,7 +426,7 @@ The script:
 
 1\. Loads and splits the dataset.
 
-2\. Removes the `duration` feature.
+2\. Excludes `duration` and `campaign` from the model's preprocessing features.
 
 3\. Fits the preprocessing and XGBoost pipeline.
 
@@ -566,7 +470,7 @@ The project provides a command-line interface for generating predictions from a 
 
 
 
-The input CSV must use a semicolon (`;`) delimiter and include the following 15 model features:
+The input CSV must use a semicolon (`;`) delimiter and include the following 14 model features:
 
 
 
@@ -576,13 +480,17 @@ age, job, marital, education, default,
 
 balance, housing, loan, contact, day, month,
 
-campaign, pdays, previous, poutcome
+pdays, previous, poutcome
 
 ```
 
 
 
-The `duration` feature is not required. Additional columns may be present in the input file, but the prediction pipeline uses the required model features.
+Neither `duration` nor `campaign` is required. Additional columns may be present in the input file, but the prediction pipeline ignores them; in particular, `campaign` must not be used for predictions made before the campaign.
+
+Missing feature values are accepted and imputed by the fitted pipeline using statistics/categories learned during training. Infinite numeric values, non-numeric values in numeric columns, and non-text values in categorical columns are rejected.
+
+The checked-in model artifact predates this feature exclusion and must be regenerated with the training script before pre-campaign inference. The prediction command detects this stale artifact and fails with a retraining message rather than silently requiring unavailable information.
 
 
 
@@ -677,7 +585,7 @@ uv run pytest -v
 
 
 
-The tests cover model evaluation, model training, input validation, metadata validation, preprocessing, and loading the saved model.
+The tests cover binary-label validation, model evaluation, missing-value imputation, input validation, metadata validation, preprocessing, and loading the saved model.
 
 
 

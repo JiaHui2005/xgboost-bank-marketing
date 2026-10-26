@@ -1,5 +1,7 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 class DataPreprocessor(BaseEstimator, TransformerMixin):
@@ -13,12 +15,29 @@ class DataPreprocessor(BaseEstimator, TransformerMixin):
             transformers=[
                 (
                     "categorical",
-                    OneHotEncoder(handle_unknown="ignore"),
+                    Pipeline(
+                        steps=[
+                            (
+                                "imputer",
+                                SimpleImputer(
+                                    strategy="constant",
+                                    fill_value="__missing__",
+                                ),
+                            ),
+                            (
+                                "encoder",
+                                OneHotEncoder(handle_unknown="ignore"),
+                            ),
+                        ]
+                    ),
                     self.categorical_columns
                 ),
                 (
                     "numerical",
-                    "passthrough",
+                    SimpleImputer(
+                        strategy="median",
+                        keep_empty_features=True,
+                    ),
                     self.numerical_columns
                 )
             ]

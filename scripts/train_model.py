@@ -5,7 +5,7 @@ import joblib
 
 from sklearn.model_selection import train_test_split
 
-from src.data_loader import DataLoader
+from src.data_loader import DataLoader, encode_binary_target
 from src.preprocessor import DataPreprocessor
 from src.model_trainer import ModelTrainer
 from src.model_evaluator import ModelEvaluator
@@ -18,7 +18,7 @@ def load_and_split_data():
     df = df.drop(columns=["duration"])
 
     X = df.drop(columns=["y"])
-    y = df["y"].map({"no": 0, "yes": 1})
+    y = encode_binary_target(df["y"])
 
     X_train_val, X_test, y_train_val, y_test = train_test_split(
         X,
@@ -46,10 +46,16 @@ if __name__ == "__main__":
     categorical_columns = X_train.select_dtypes(
         include=["str", "object", "category"]
     ).columns.tolist()
+    categorical_columns = [
+        column for column in categorical_columns if column != "campaign"
+    ]
 
     numerical_columns = X_train.select_dtypes(
         include=["number"]
     ).columns.tolist()
+    numerical_columns = [
+        column for column in numerical_columns if column != "campaign"
+    ]
 
     preprocessor = DataPreprocessor(
         categorical_columns=categorical_columns,
@@ -98,7 +104,7 @@ if __name__ == "__main__":
         "model_type": "XGBClassifier",
         "threshold": 0.20,
         "target_mapping": {"no": 0, "yes": 1},
-        "dropped_features": ["duration"],
+        "dropped_features": ["duration", "campaign"],
         "validation_metrics": metrics,
     }
 

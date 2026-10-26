@@ -55,6 +55,28 @@ def test_evaluator_requires_both_classes():
         )
 
 
+@pytest.mark.parametrize(
+    "invalid_labels",
+    [
+        np.array([0, 2]),
+        np.array([0, np.nan]),
+        np.array(["no", "yes"]),
+    ],
+)
+def test_evaluator_rejects_labels_outside_binary_domain(invalid_labels):
+    evaluator = ModelEvaluator()
+
+    with pytest.raises(ValueError, match="only 0 and 1"):
+        evaluator.evaluate(invalid_labels, np.array([0.1, 0.9]))
+
+
+def test_evaluator_rejects_non_1d_labels():
+    evaluator = ModelEvaluator()
+
+    with pytest.raises(ValueError, match="one-dimensional"):
+        evaluator.evaluate(np.array([[0, 1]]), np.array([0.1, 0.9]))
+
+
 def test_confusion_matrix_requires_evaluation():
     evaluator = ModelEvaluator()
 
