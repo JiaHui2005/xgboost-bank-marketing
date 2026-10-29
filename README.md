@@ -297,7 +297,7 @@ Remove Leakage-Prone Feature
 
     v
 
-Stratified Train / Validation / Test Split
+Chronological Train / Validation Split (80/20)
 
     |
 
@@ -327,8 +327,6 @@ Save Model Pipeline and Metadata
 
     v
 
-Final Test Evaluation
-
 ```
 
 
@@ -337,20 +335,19 @@ Final Test Evaluation
 
 
 
-The dataset is divided into three subsets using stratified splitting with a fixed random seed:
+The dataset is split by its original UCI row order, without shuffling or stratification:
 
 
 
 | Subset | Percentage |
 | --- | --- |
-| Training | 64% |
-| Validation | 16% |
-| Test | 20% |
+| Training (first rows) | 80% |
+| Validation (last rows) | 20% |
 
 
 
 
-Stratification helps preserve the target-class distribution across the subsets. The fixed random seed (`42`) makes the split reproducible for the same dataset and environment.
+The source describes the rows as ordered by date. Validation is used for model development and selection, not as an independent final test estimate. No independent evaluation is currently available; that requires new campaign data not used for model or threshold selection.
 
 
 
@@ -374,15 +371,15 @@ The current XGBoost configuration includes:
 
 
 
-The preprocessing pipeline imputes numerical missing values with the training-split median and categorical missing values with a dedicated `__missing__` category before encoding. Imputation is fitted within each model pipeline, so validation/test rows do not influence the imputation statistics. Unknown categorical values remain supported by one-hot encoding. Target labels are validated as exactly `no` or `yes` before mapping to `0`/`1`.
+The preprocessing pipeline imputes numerical missing values with the training-split median and categorical missing values with a dedicated `__missing__` category before encoding. Imputation is fitted within each model pipeline, so validation rows do not influence the imputation statistics. Unknown categorical values remain supported by one-hot encoding. Target labels are validated as exactly `no` or `yes` before mapping to `0`/`1`.
 
 
 
 ## Model Performance
 
-The project uses validation data for model and threshold decisions. The test split is reserved for one final evaluation after those decisions are locked. The classification threshold currently used by the training workflow is `0.20`.
+The training and comparison scripts preserve the UCI row order and use the first 80% of rows for training and the final 20% for validation. The dataset is documented as ordered by date; this split supports development on a later period, but it is validation—not an independent test or unbiased final estimate. The classification threshold currently used by the training workflow is `0.20`.
 
-The README previously reported test-set metrics for multiple candidate models and used them to support a model comparison. That exposed the test results to model selection; those historical numbers are therefore withdrawn as an unbiased final estimate. The checked-in split is no longer a pristine holdout. For a defensible final estimate, establish a fresh holdout (preferably a later time period) after model and threshold choices are fixed.
+The README previously reported test-set metrics for multiple candidate models and used them to support a model comparison. That exposed the test results to model selection; those historical numbers are therefore withdrawn as an unbiased final estimate. No independent evaluation is currently available from this dataset. A final independent evaluation requires new campaign data that has not been used for model, hyperparameter, or threshold selection, evaluated after those choices are locked.
 
 Choose metrics according to campaign costs: precision and recall describe different error tradeoffs; F1 balances them at a chosen threshold; ROC-AUC and Average Precision assess ranking across thresholds. Accuracy alone is insufficient for the imbalanced target. The fixed threshold should be selected using validation data and an explicit business objective, not the test set.
 
@@ -390,7 +387,7 @@ Choose metrics according to campaign costs: precision and recall describe differ
 
 ## Baseline Comparison
 
-XGBoost and Logistic Regression are compared on the same stratified training and validation split, using the same target and fixed threshold. Categorical features are one-hot encoded; Logistic Regression additionally scales numerical features. Candidate ranking must be based on validation metrics only. No test metrics are produced by the comparison script.
+XGBoost and Logistic Regression are compared on the same chronological 80/20 training/validation split, using the same target and fixed threshold. Categorical features are one-hot encoded; Logistic Regression additionally scales numerical features. Candidate ranking must be based on validation metrics only. No test metrics are produced by the comparison script.
 
 ### Reproduce the Comparison
 
@@ -400,7 +397,7 @@ Run the following command from the project root:
 uv run python scripts/compare_models.py
 ```
 
-The script trains both models, reports validation metrics only, and saves them to `data/processed/model_comparison.csv`. The test split is discarded without prediction or scoring.
+The script trains both models, reports validation metrics only, and saves them to `data/processed/model_comparison.csv`. It does not create or score a test split.
 
 The threshold is held fixed at `0.20` for this comparison. It should not be described as optimized unless a separate validation-based threshold-selection experiment has been performed.
 
@@ -434,7 +431,6 @@ The script:
 
 5\. Saves the trained pipeline and metadata.
 
-6\. Reloads the saved pipeline and evaluates it on the test set.
 
 
 
@@ -454,7 +450,7 @@ models/
 
 
 
-The script prints validation metrics, test metrics, and their respective confusion matrices.
+The script prints validation metrics and the validation confusion matrix only. Validation results are for development, not an independent final estimate; independent evaluation remains pending new campaign data.
 
 
 

@@ -73,7 +73,13 @@ def test_training_split_uses_only_pre_campaign_features(monkeypatch):
 
     monkeypatch.setattr("scripts.train_model.DataLoader", FakeDataLoader)
 
-    X_train, X_val, X_test, *_ = load_and_split_data()
+    X_train, X_val, y_train, y_val = load_and_split_data()
 
-    for split in (X_train, X_val, X_test):
+    for split in (X_train, X_val):
         assert split.columns.tolist() == EXPECTED_PRE_CAMPAIGN_FEATURES
+    assert len(X_train) == 80
+    assert len(X_val) == 20
+    assert X_train["age"].tolist() == list(range(80))
+    assert X_val["age"].tolist() == list(range(80, 100))
+    assert y_train.tolist() == [1, 0] * 40
+    assert y_val.tolist() == [1, 0] * 10

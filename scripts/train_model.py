@@ -3,8 +3,6 @@ from pathlib import Path
 
 import joblib
 
-from sklearn.model_selection import train_test_split
-
 from src.data_loader import DataLoader, encode_binary_target
 from src.feature_contract import (
     DROPPED_PRE_CAMPAIGN_FEATURES,
@@ -15,49 +13,35 @@ from src.model_trainer import ModelTrainer
 from src.model_evaluator import ModelEvaluator
 
 def load_and_split_data():
-    """Load data, remove leakage-prone feature, and split datasets"""
+    """Load data and split it chronologically into train and validation sets."""
     loader = DataLoader("data/raw/bank-full.csv")
     df = loader.load_data()
 
+    if len(df) < 2:
+        raise ValueError("Dataset must contain at least two rows to split.")
+
     X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
+    split_index = int(len(df) * 0.8)
 
-    X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y,
+    return (
+        X.iloc[:split_index],
+        X.iloc[split_index:],
+        y.iloc[:split_index],
+        y.iloc[split_index:],
     )
 
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train_val,
-        y_train_val,
-        test_size=0.2,
-        random_state=42,
-        stratify=y_train_val,
-    )
 
-    return X_train, X_val, X_test, y_train, y_val, y_test
-
-
-
-if __name__ == "__main__":
-    X_train, X_val, X_test, y_train, y_val, y_test = load_and_split_data()
+def main():
+    """Train on earlier rows and report validation metrics only."""
+    X_train, X_val, y_train, y_val = load_and_split_data()
 
     categorical_columns = X_train.select_dtypes(
         include=["str", "object", "category"]
     ).columns.tolist()
-    categorical_columns = [
-        column for column in categorical_columns if column != "campaign"
-    ]
-
     numerical_columns = X_train.select_dtypes(
         include=["number"]
     ).columns.tolist()
-    numerical_columns = [
-        column for column in numerical_columns if column != "campaign"
-    ]
 
     preprocessor = DataPreprocessor(
         categorical_columns=categorical_columns,
@@ -116,15 +100,5 @@ if __name__ == "__main__":
     print(f"\nModel saved to: {model_path}")
     print(f"Metadata saved to: {metadata_path}")
 
-    saved_pipeline = joblib.load(model_path)
-    y_test_proba = saved_pipeline.predict_proba(X_test)[:, 1]
-
-    test_evaluator = ModelEvaluator(threshold=0.20)
-    test_metrics = test_evaluator.evaluate(y_test, y_test_proba)
-
-    print("\nFinal test metrics:")
-    for name, value in test_metrics.items():
-        print(f"{name.upper()}: {value:.4f}")
-
-    print("\nTest confusion matrix:")
-    print(test_evaluator.get_confusion_matrix())
+if __name__ == "__main__":
+    main()
