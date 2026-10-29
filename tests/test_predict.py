@@ -4,9 +4,51 @@ import numpy as np
 import pytest
 import json
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import scripts.predict as predict_module
 from scripts.predict import REQUIRED_COLUMNS, validate_input_data
+from src.feature_contract import DROPPED_PRE_CAMPAIGN_FEATURES
+
+
+def valid_metadata():
+    return {
+        "artifact_version": 1,
+        "model_type": "XGBClassifier",
+        "feature_names": REQUIRED_COLUMNS.copy(),
+        "dropped_features": DROPPED_PRE_CAMPAIGN_FEATURES.copy(),
+        "threshold": 0.2,
+        "target_mapping": {"no": 0, "yes": 1},
+        "python_version": "3.12.0",
+        "dependency_versions": {
+            "numpy": "2.0.0",
+            "pandas": "2.0.0",
+            "scikit-learn": "1.0.0",
+            "xgboost": "2.0.0",
+        },
+        "seed": 42,
+        "trained_at_utc": "2026-10-29T00:00:00+00:00",
+        "data_version": "UCI Bank Marketing bank-full.csv (ordered rows)",
+        "split": {
+            "strategy": "ordered",
+            "train_fraction": 0.8,
+            "validation_fraction": 0.2,
+        },
+        "validation_metrics": {"average_precision": 0.5},
+    }
+
+
+def pipeline_with_feature_columns(columns=REQUIRED_COLUMNS):
+    numerical = [column for column in columns if column in predict_module.NUMERICAL_COLUMNS]
+    categorical = [column for column in columns if column not in numerical]
+    return SimpleNamespace(
+        named_steps={
+            "preprocessor": SimpleNamespace(
+                numerical_columns=numerical,
+                categorical_columns=categorical,
+            )
+        }
+    )
 
 
 def create_valid_dataframe():
@@ -261,18 +303,15 @@ def test_load_artifacts_rejects_model_trained_with_campaign(
     model_path = tmp_path / "fake_model.joblib"
     model_path.write_bytes(b"fake")
     metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(json.dumps({"threshold": 0.2}), encoding="utf-8")
+    metadata_path.write_text(json.dumps(valid_metadata()), encoding="utf-8")
 
     monkeypatch.setattr(predict_module, "MODEL_PATH", model_path)
     monkeypatch.setattr(predict_module, "METADATA_PATH", metadata_path)
 
-    class LegacyPipeline:
-        feature_names_in_ = ["age", "campaign"]
-
     with patch.object(
         predict_module.joblib,
         "load",
-        return_value=LegacyPipeline(),
+        return_value=pipeline_with_feature_columns(["age", "campaign"]),
     ):
         with pytest.raises(RuntimeError, match="Retrain the model"):
             predict_module.load_artifacts()
@@ -285,10 +324,9 @@ def test_load_artifacts_rejects_metadata_for_model_using_campaign(
     model_path = tmp_path / "fake_model.joblib"
     model_path.write_bytes(b"fake")
     metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(
-        json.dumps({"threshold": 0.2, "dropped_features": ["duration"]}),
-        encoding="utf-8",
-    )
+    metadata = valid_metadata()
+    metadata["dropped_features"] = ["duration"]
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     monkeypatch.setattr(predict_module, "MODEL_PATH", model_path)
     monkeypatch.setattr(predict_module, "METADATA_PATH", metadata_path)
@@ -305,18 +343,56 @@ def test_load_artifacts_rejects_metadata_missing_current_contact_exclusions(
     model_path = tmp_path / "fake_model.joblib"
     model_path.write_bytes(b"fake")
     metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(
-        json.dumps(
-            {
-                "threshold": 0.2,
-                "dropped_features": ["duration", "campaign"],
-            }
-        ),
-        encoding="utf-8",
-    )
+    metadata = valid_metadata()
+    metadata["dropped_features"] = ["duration", "campaign"]
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
     monkeypatch.setattr(predict_module, "MODEL_PATH", model_path)
     monkeypatch.setattr(predict_module, "METADATA_PATH", metadata_path)
 
     with patch.object(predict_module.joblib, "load", return_value=object()):
         with pytest.raises(RuntimeError, match="pre-campaign feature contract"):
+            predict_module.load_artifacts()
+
+
+@pytest.mark.parametrize(
+    ("change", "expected_error"),
+    [
+        ("missing_version", ValueError),
+        ("wrong_version", ValueError),
+        ("boolean_version", ValueError),
+        ("feature_order", RuntimeError),
+        ("exclusions", RuntimeError),
+        ("pipeline_schema", RuntimeError),
+    ],
+)
+def test_load_artifacts_rejects_incompatible_versioned_contract(
+    tmp_path,
+    monkeypatch,
+    change,
+    expected_error,
+):
+    metadata = valid_metadata()
+    pipeline = pipeline_with_feature_columns()
+    if change == "missing_version":
+        del metadata["artifact_version"]
+    elif change == "wrong_version":
+        metadata["artifact_version"] = 2
+    elif change == "boolean_version":
+        metadata["artifact_version"] = True
+    elif change == "feature_order":
+        metadata["feature_names"] = metadata["feature_names"][::-1]
+    elif change == "exclusions":
+        metadata["dropped_features"] = ["duration"]
+    elif change == "pipeline_schema":
+        pipeline = pipeline_with_feature_columns(REQUIRED_COLUMNS[:-1] + ["campaign"])
+
+    model_path = tmp_path / "fake_model.joblib"
+    model_path.write_bytes(b"fake")
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    monkeypatch.setattr(predict_module, "MODEL_PATH", model_path)
+    monkeypatch.setattr(predict_module, "METADATA_PATH", metadata_path)
+
+    with patch.object(predict_module.joblib, "load", return_value=pipeline):
+        with pytest.raises(expected_error):
             predict_module.load_artifacts()

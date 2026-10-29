@@ -64,23 +64,71 @@ def load_artifacts():
             "Metadata threshold must be a finite number between 0 and 1."
         )
 
-    metadata_dropped_features = metadata.get("dropped_features")
-    if isinstance(metadata_dropped_features, list):
-        unexcluded_features = set(DROPPED_PRE_CAMPAIGN_FEATURES) - set(
-            metadata_dropped_features
+    required_metadata = {
+        "artifact_version",
+        "model_type",
+        "feature_names",
+        "dropped_features",
+        "target_mapping",
+        "python_version",
+        "dependency_versions",
+        "seed",
+        "trained_at_utc",
+        "data_version",
+        "split",
+        "validation_metrics",
+    }
+    missing_metadata = required_metadata - metadata.keys()
+    if missing_metadata:
+        raise ValueError(
+            f"Metadata is missing required fields: {sorted(missing_metadata)}"
         )
-        model_uses_excluded_features = bool(unexcluded_features)
-    else:
-        model_features = getattr(pipeline, "feature_names_in_", None)
-        model_uses_excluded_features = (
-            model_features is None
-            or bool(set(model_features).intersection(DROPPED_PRE_CAMPAIGN_FEATURES))
-        )
-    if model_uses_excluded_features:
+
+    artifact_version = metadata["artifact_version"]
+    if (
+        isinstance(artifact_version, bool)
+        or not isinstance(artifact_version, int)
+        or artifact_version != 1
+    ):
+        raise ValueError("Unsupported or invalid artifact version.")
+
+    if (
+        metadata["model_type"] != "XGBClassifier"
+        or metadata["feature_names"] != REQUIRED_COLUMNS
+        or metadata["dropped_features"] != DROPPED_PRE_CAMPAIGN_FEATURES
+        or metadata["target_mapping"] != {"no": 0, "yes": 1}
+        or metadata["threshold"] != 0.20
+        or metadata["seed"] != 42
+    ):
         raise RuntimeError(
             "The saved model is incompatible with the pre-campaign feature "
-            "contract. Retrain the model without duration, campaign, contact, "
-            "day, and month before running pre-campaign predictions."
+            "contract or training settings. Retrain the model before running "
+            "pre-campaign predictions."
+        )
+
+    if not isinstance(metadata["dependency_versions"], dict) or not all(
+        isinstance(metadata["dependency_versions"].get(package), str)
+        for package in ("numpy", "pandas", "scikit-learn", "xgboost")
+    ):
+        raise ValueError("Metadata contains invalid dependency versions.")
+
+    try:
+        preprocessor = pipeline.named_steps["preprocessor"]
+        model_features = (
+            list(preprocessor.categorical_columns)
+            + list(preprocessor.numerical_columns)
+        )
+    except (AttributeError, KeyError, TypeError):
+        model_features = []
+
+    if (
+        len(model_features) != len(REQUIRED_COLUMNS)
+        or len(set(model_features)) != len(model_features)
+        or set(model_features) != set(REQUIRED_COLUMNS)
+    ):
+        raise RuntimeError(
+            "The saved pipeline is incompatible with the pre-campaign feature "
+            "contract. Retrain the model before running pre-campaign predictions."
         )
 
     return pipeline, metadata

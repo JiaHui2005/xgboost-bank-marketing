@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -118,4 +119,34 @@ def test_training_evaluates_validation_only_and_does_not_score_test(
     assert len(dumped) == 1
     metadata = json.loads((tmp_path / "models" / "metadata.json").read_text())
     assert metadata["validation_metrics"] == {"recall": 1.0}
+    assert metadata["artifact_version"] == 1
+    assert metadata["model_type"] == "XGBClassifier"
+    assert metadata["feature_names"] == PRE_CAMPAIGN_FEATURES
+    assert metadata["dropped_features"] == [
+        "duration",
+        "campaign",
+        "contact",
+        "day",
+        "month",
+    ]
+    assert metadata["threshold"] == 0.20
+    assert metadata["target_mapping"] == {"no": 0, "yes": 1}
+    assert metadata["python_version"]
+    assert set(metadata["dependency_versions"]) == {
+        "numpy",
+        "pandas",
+        "scikit-learn",
+        "xgboost",
+    }
+    assert all(metadata["dependency_versions"].values())
+    assert metadata["seed"] == 42
+    trained_at = datetime.fromisoformat(metadata["trained_at_utc"])
+    assert trained_at.utcoffset().total_seconds() == 0
+    assert metadata["data_version"] == "UCI Bank Marketing bank-full.csv (ordered rows)"
+    assert metadata["split"] == {
+        "strategy": "ordered",
+        "train_fraction": 0.8,
+        "validation_fraction": 0.2,
+    }
+    assert not any("test" in key.lower() for key in metadata)
     assert "Final test metrics" not in capsys.readouterr().out

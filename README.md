@@ -103,11 +103,25 @@ The dataset contains customer demographic information, financial information, an
 
 
 
-The prediction point is before the current marketing campaign begins. The model therefore excludes `duration` (known only after a call), `campaign` (counts current-campaign contacts), and `contact`, `day`, and `month` (attributes of the current contact in this dataset).
+The prediction point is before the current marketing campaign begins. The table distinguishes what the UCI dictionary says from operational availability: the dictionary describes fields, but does not prove when a production system snapshots or exposes them. Operational confirmation provided on 2026-10-29 states that `pdays`, `previous`, and `poutcome` are available before the current campaign; confirm profile-field freshness and availability in the operational source before deployment.
 
+| Feature | UCI meaning / source | Available at pre-campaign prediction? | Missing / special values | Decision |
+| --- | --- | --- | --- | --- |
+| `age` | Client age | Assumed available; confirm source freshness | No missing attributes reported by UCI; numeric nulls use the training median | Keep |
+| `job` | Client job type | Assumed available; confirm source freshness | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
+| `marital` | Marital status (`divorced` includes divorced or widowed) | Assumed available; confirm source freshness | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
+| `education` | Education level | Assumed available; confirm source freshness | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
+| `default` | Whether the client has credit in default | Assumed available; confirm source freshness | Nulls use `__missing__`; `yes`/`no` are values | Keep |
+| `balance` | Average yearly balance, in euros | Assumed available; confirm source freshness | Numeric nulls use the training median | Keep |
+| `housing` | Whether the client has a housing loan | Assumed available; confirm source freshness | Nulls use `__missing__`; `yes`/`no` are values | Keep |
+| `loan` | Whether the client has a personal loan | Assumed available; confirm source freshness | Nulls use `__missing__`; `yes`/`no` are values | Keep |
+| `pdays` | Days since the client was last contacted in a previous campaign; `-1` means not previously contacted | UCI defines prior-campaign history; operationally confirmed available before the current campaign (2026-10-29) | `-1` is a meaningful sentinel, not missing; other numeric nulls use the training median | Keep |
+| `previous` | Number of contacts before this campaign for this client | UCI defines prior-campaign history; operationally confirmed available before the current campaign (2026-10-29) | `0` means no prior contacts; numeric nulls use the training median | Keep |
+| `poutcome` | Outcome of the previous marketing campaign | UCI defines prior-campaign history; operationally confirmed available before the current campaign (2026-10-29) | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
 
+The UCI dictionary reports no missing attribute values. `unknown`, `-1`, and `0` are documented field values, not missing values. The preprocessing policy above describes handling for nulls if they occur in other input data.
 
-The historical features `pdays`, `previous`, and `poutcome` are retained only under the assumption that they contain information available before the current campaign. This timing must be confirmed against the operational data source before deployment.
+The model excludes `duration` (known only after a call), `campaign` (counts contacts in the current campaign), and `contact`, `day`, and `month` (attributes of the current contact). These are not available at the stated prediction point.
 
 
 
@@ -381,7 +395,7 @@ The training and comparison scripts preserve the UCI row order and use the first
 
 The README previously reported test-set metrics for multiple candidate models and used them to support a model comparison. That exposed the test results to model selection; those historical numbers are therefore withdrawn as an unbiased final estimate. No independent evaluation is currently available from this dataset. A final independent evaluation requires new campaign data that has not been used for model, hyperparameter, or threshold selection, evaluated after those choices are locked.
 
-Choose metrics according to campaign costs: precision and recall describe different error tradeoffs; F1 balances them at a chosen threshold; ROC-AUC and Average Precision assess ranking across thresholds. Accuracy alone is insufficient for the imbalanced target. The fixed threshold should be selected using validation data and an explicit business objective, not the test set.
+The campaign's contact capacity and the costs/value of false positives and false negatives have not been provided, so the operating threshold is not optimized or claimed to be business-optimal. Until those inputs are available, use validation Average Precision (AP) as a provisional model-ranking metric. At the existing fixed threshold of `0.20`, also report precision, recall, F1, FPR (`FP / (FP + TN)`), FNR (`FN / (FN + TP)`), confusion counts, and class support. These threshold-specific values describe tradeoffs; they do not determine the business-optimal threshold. ROC-AUC is a secondary ranking metric, and accuracy alone is insufficient for the imbalanced target.
 
 
 
@@ -482,11 +496,11 @@ pdays, previous, poutcome
 
 
 
-`duration`, `campaign`, `contact`, `day`, and `month` are excluded and are not required. Additional columns may be present in the input file, but the prediction pipeline ignores them. The historical features `pdays`, `previous`, and `poutcome` are valid only if they are available before the current campaign starts.
+`duration`, `campaign`, `contact`, `day`, and `month` are excluded and are not required. Additional columns may be present in the input file, but the prediction pipeline ignores them. Operations confirmed that `pdays`, `previous`, and `poutcome` are available before the current campaign starts; profile-field availability still requires confirmation.
 
 Missing feature values are accepted and imputed by the fitted pipeline using statistics/categories learned during training. Infinite numeric values, non-numeric values in numeric columns, and non-text values in categorical columns are rejected.
 
-The checked-in model artifact predates this feature exclusion and must be regenerated with the training script before pre-campaign inference. The prediction command detects this stale artifact and fails with a retraining message rather than silently requiring unavailable information.
+The checked-in model artifact uses the versioned pre-campaign feature contract. The prediction command checks that metadata and the saved pipeline match this contract before inference; retrain the model after changing its feature contract or training settings.
 
 
 

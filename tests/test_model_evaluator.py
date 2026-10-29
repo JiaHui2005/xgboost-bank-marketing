@@ -16,6 +16,15 @@ def test_evaluator_calculates_metrics_correctly():
     assert metrics["precision"] == pytest.approx(2 / 3)
     assert metrics["recall"] == pytest.approx(1.0)
     assert metrics["f1"] == pytest.approx(0.8)
+    assert metrics["fpr"] == pytest.approx(0.5)
+    assert metrics["fnr"] == pytest.approx(0.0)
+    assert metrics["tn"] == 1
+    assert metrics["fp"] == 1
+    assert metrics["fn"] == 0
+    assert metrics["tp"] == 2
+    assert metrics["support"] == 4
+    assert metrics["negative_support"] == 2
+    assert metrics["positive_support"] == 2
     assert 0 <= metrics["roc_auc"] <= 1
     assert 0 <= metrics["pr_auc"] <= 1
 

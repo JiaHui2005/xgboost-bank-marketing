@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -10,7 +11,6 @@ from sklearn.metrics import (
 )
 
 from scripts.compare_models import (
-    RANDOM_STATE,
     build_models,
     load_and_split_data,
 )
@@ -41,6 +41,7 @@ def evaluate_thresholds(y_true, probabilities, thresholds):
                     y_true, predictions, zero_division=0
                 ),
                 "predicted_positive": int(predictions.sum()),
+                "contact_rate": float(predictions.sum() / len(y_true)),
                 "true_positive": int(
                     ((predictions == 1) & (y_true == 1)).sum()
                 ),
@@ -57,7 +58,7 @@ def evaluate_thresholds(y_true, probabilities, thresholds):
 
 
 def main():
-    X_train, X_val, _, y_train, y_val, _ = load_and_split_data()
+    X_train, X_val, y_train, y_val = load_and_split_data()
 
     models = build_models(X_train)
     model = models["XGBoost"]
@@ -73,13 +74,11 @@ def main():
     thresholds = sorted(
         set(
             [CURRENT_THRESHOLD]
-            + [round(value, 2) for value in __import__("numpy").arange(0.05, 0.81, 0.01)]
+            + [round(value, 2) for value in np.arange(0.05, 0.81, 0.01)]
         )
     )
 
     results = evaluate_thresholds(y_val.to_numpy(), probabilities, thresholds)
-
-    best_row = results.loc[results["f1"].idxmax()]
 
     current_row = results.loc[
         (results["threshold"] - CURRENT_THRESHOLD).abs().lt(1e-9)
@@ -91,10 +90,7 @@ def main():
     print("\nCurrent threshold (validation):")
     print(current_row.to_string())
 
-    print("\nBest threshold by validation F1:")
-    print(best_row.to_string())
-
-    print(f"\nFull results saved to: {OUTPUT_PATH}")
+    print(f"\nValidation threshold frontier saved to: {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

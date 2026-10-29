@@ -35,3 +35,19 @@ def test_group_false_positive_rate_is_undefined_without_actual_negatives():
 
     assert pd.isna(result["false_positive_rate"])
     assert result["false_positive_fraction_within_group"] == 0
+
+
+def test_group_false_negative_rate_is_undefined_without_actual_positives():
+    summary = pd.DataFrame(
+        {
+            "total": [4],
+            "actual_positive": [0],
+            "false_positive": [1],
+            "false_negative": [0],
+        }
+    )
+
+    result = add_group_error_rates(summary).iloc[0]
+
+    assert pd.isna(result["false_negative_rate_within_actual_positive"])
+    assert pd.isna(result["missed_positive_share"])

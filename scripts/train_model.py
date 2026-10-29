@@ -1,4 +1,7 @@
 import json
+import sys
+from datetime import datetime, timezone
+from importlib.metadata import version
 from pathlib import Path
 
 import joblib
@@ -66,7 +69,8 @@ def main():
     print(f"Categorical features: {len(categorical_columns)}")
     print(f"Numerical features: {len(numerical_columns)}")
 
-    evaluator = ModelEvaluator(threshold=0.20)
+    threshold = 0.20
+    evaluator = ModelEvaluator(threshold=threshold)
 
     y_val_proba = trainer.predict_proba(X_val)
     metrics = evaluator.evaluate(y_val, y_val_proba)
@@ -87,10 +91,25 @@ def main():
     joblib.dump(trainer.pipeline, model_path)
 
     metadata = {
+        "artifact_version": 1,
         "model_type": "XGBClassifier",
-        "threshold": 0.20,
+        "feature_names": PRE_CAMPAIGN_FEATURES,
+        "threshold": threshold,
         "target_mapping": {"no": 0, "yes": 1},
         "dropped_features": DROPPED_PRE_CAMPAIGN_FEATURES,
+        "python_version": sys.version.split()[0],
+        "dependency_versions": {
+            package: version(package)
+            for package in ("numpy", "pandas", "scikit-learn", "xgboost")
+        },
+        "seed": 42,
+        "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+        "data_version": "UCI Bank Marketing bank-full.csv (ordered rows)",
+        "split": {
+            "strategy": "ordered",
+            "train_fraction": 0.8,
+            "validation_fraction": 0.2,
+        },
         "validation_metrics": metrics,
     }
 

@@ -53,6 +53,7 @@ class ModelEvaluator:
         self.confusion_matrix_ = confusion_matrix(
             y_true, y_pred, labels=[0, 1]
         )
+        tn, fp, fn, tp = self.confusion_matrix_.ravel()
 
         return {
             "accuracy": accuracy_score(y_true, y_pred),
@@ -65,6 +66,15 @@ class ModelEvaluator:
             "f1": f1_score(
                 y_true, y_pred, zero_division=0
             ),
+            "fpr": fp / (fp + tn),
+            "fnr": fn / (fn + tp),
+            "tn": int(tn),
+            "fp": int(fp),
+            "fn": int(fn),
+            "tp": int(tp),
+            "support": len(y_true),
+            "negative_support": int(tn + fp),
+            "positive_support": int(fn + tp),
             "roc_auc": roc_auc_score(y_true, y_proba),
             "pr_auc": average_precision_score(y_true, y_proba),
         }

@@ -1,19 +1,61 @@
 {
+    "artifact_version": 1,
     "model_type": "XGBClassifier",
+    "feature_names": [
+        "age",
+        "job",
+        "marital",
+        "education",
+        "default",
+        "balance",
+        "housing",
+        "loan",
+        "pdays",
+        "previous",
+        "poutcome"
+    ],
     "threshold": 0.2,
     "target_mapping": {
         "no": 0,
         "yes": 1
     },
     "dropped_features": [
-        "duration"
+        "duration",
+        "campaign",
+        "contact",
+        "day",
+        "month"
     ],
+    "python_version": "3.12.14",
+    "dependency_versions": {
+        "numpy": "2.5.4",
+        "pandas": "3.0.6",
+        "scikit-learn": "1.9.1",
+        "xgboost": "3.4.1"
+    },
+    "seed": 42,
+    "trained_at_utc": "2026-10-29T07:41:05.416691+00:00",
+    "data_version": "UCI Bank Marketing bank-full.csv (ordered rows)",
+    "split": {
+        "strategy": "ordered",
+        "train_fraction": 0.8,
+        "validation_fraction": 0.2
+    },
     "validation_metrics": {
-        "accuracy": 0.8733757257395631,
-        "precision": 0.4655511811023622,
-        "recall": 0.5591016548463357,
-        "f1": 0.5080558539205156,
-        "roc_auc": 0.8082660159193288,
-        "pr_auc": 0.4739944794092244
+        "accuracy": 0.6872719230343912,
+        "precision": 0.5064043915827996,
+        "recall": 0.38760504201680673,
+        "f1": 0.439111463704879,
+        "fpr": 0.1743979311459512,
+        "fnr": 0.6123949579831933,
+        "tn": 5108,
+        "fp": 1079,
+        "fn": 1749,
+        "tp": 1107,
+        "support": 9043,
+        "negative_support": 6187,
+        "positive_support": 2856,
+        "roc_auc": 0.6940681679169163,
+        "pr_auc": 0.4838499354141811
     }
 }
