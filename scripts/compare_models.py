@@ -5,7 +5,6 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -21,30 +20,23 @@ OUTPUT_PATH = Path("data/processed/model_comparison.csv")
 
 
 def load_and_split_data():
-    """Load data and create reproducible stratified train/validation/test splits"""
+    """Load data and split chronologically into train and validation sets."""
     loader = DataLoader("data/raw/bank-full.csv")
     df = loader.load_data()
 
+    if len(df) < 2:
+        raise ValueError("Dataset must contain at least two rows to split.")
+
     X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
+    split_index = int(len(df) * 0.8)
 
-    X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=RANDOM_STATE,
-        stratify=y,
+    return (
+        X.iloc[:split_index],
+        X.iloc[split_index:],
+        y.iloc[:split_index],
+        y.iloc[split_index:],
     )
-
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train_val,
-        y_train_val,
-        test_size=0.2,
-        random_state=RANDOM_STATE,
-        stratify=y_train_val,
-    )
-
-    return X_train, X_val, X_test, y_train, y_val, y_test
 
 
 def build_preprocessor(X_train, scale_numeric=False):
@@ -152,9 +144,7 @@ def evaluate_model(name, model, X, y):
 
 
 def main():
-    # The test split is intentionally discarded here. It is reserved for a
-    # single final evaluation after model and threshold choices are locked.
-    X_train, X_val, _, y_train, y_val, _ = load_and_split_data()
+    X_train, X_val, y_train, y_val = load_and_split_data()
     models = build_models(X_train)
 
     results = []

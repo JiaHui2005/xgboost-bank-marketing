@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.feature_contract import PRE_CAMPAIGN_FEATURES
 from scripts.compare_models import (
     build_models,
     build_preprocessor,
@@ -12,11 +13,11 @@ from scripts.compare_models import (
 )
 
 
-def test_load_and_split_data_has_expected_sizes(monkeypatch):
-    """Check the 64/16/20 split and leakage-feature removal."""
+def test_load_and_split_data_uses_ordered_80_20_split(monkeypatch):
+    """Check temporal order, 80/20 sizes, and leakage-feature removal."""
     rows = 1000
     df = pd.DataFrame({
-        "age": np.arange(rows) % 60 + 18,
+        "age": np.arange(rows),
         "job": ["admin."] * rows,
         "marital": ["single"] * rows,
         "education": ["secondary"] * rows,
@@ -47,13 +48,14 @@ def test_load_and_split_data_has_expected_sizes(monkeypatch):
         FakeDataLoader,
     )
 
-    X_train, X_val, X_test, y_train, y_val, y_test = (
-        load_and_split_data()
-    )
+    result = load_and_split_data()
+    assert len(result) == 4
+    X_train, X_val, y_train, y_val = result
 
-    assert len(X_train) == 640
-    assert len(X_val) == 160
-    assert len(X_test) == 200
+    assert len(X_train) == 800
+    assert len(X_val) == 200
+    assert X_train["age"].tolist() == list(range(800))
+    assert X_val["age"].tolist() == list(range(800, 1000))
 
     assert "duration" not in X_train.columns
     assert "y" not in X_train.columns
@@ -61,6 +63,29 @@ def test_load_and_split_data_has_expected_sizes(monkeypatch):
         "campaign", "contact", "day", "month"
     }.intersection(X_train.columns)
     assert set(y_train.unique()) == {0, 1}
+    assert y_train.tolist() == [1, 0] * 400
+    assert y_val.tolist() == [1, 0] * 100
+
+
+@pytest.mark.parametrize("rows", [0, 1])
+def test_load_and_split_data_rejects_too_few_rows(monkeypatch, rows):
+    data = {
+        feature: np.arange(rows) for feature in PRE_CAMPAIGN_FEATURES
+    }
+    data["y"] = ["no"] * rows
+    df = pd.DataFrame(data)
+
+    class FakeDataLoader:
+        def __init__(self, path):
+            self.path = path
+
+        def load_data(self):
+            return df.copy()
+
+    monkeypatch.setattr("scripts.compare_models.DataLoader", FakeDataLoader)
+
+    with pytest.raises(ValueError, match="at least two rows"):
+        load_and_split_data()
 
 
 def test_build_models_returns_both_models():
@@ -146,7 +171,6 @@ def test_main_uses_validation_only_and_never_evaluates_test(
     X_val = pd.DataFrame({"age": [40]})
     y_train = np.array([0])
     y_val = np.array([1])
-    test_sentinel = object()
     evaluated = []
 
     class FakeModel:
@@ -157,7 +181,7 @@ def test_main_uses_validation_only_and_never_evaluates_test(
     monkeypatch.setattr(
         compare_module,
         "load_and_split_data",
-        lambda: (X_train, X_val, test_sentinel, y_train, y_val, test_sentinel),
+        lambda: (X_train, X_val, y_train, y_val),
     )
     monkeypatch.setattr(
         compare_module,
