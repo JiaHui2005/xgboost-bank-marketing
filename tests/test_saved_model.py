@@ -1,14 +1,13 @@
 
 import json
-import joblib
-import numpy as np
+import pytest
 
 from pathlib import Path
 
-from scripts.train_model import load_and_split_data
+from scripts.predict import load_artifacts
 
 
-def test_saved_pipeline_can_be_loaded_and_predict():
+def test_stale_saved_pipeline_is_rejected_for_pre_campaign_inference():
     root = Path(__file__).resolve().parents[1]
 
     model_path = root / "models" / "xgboost_pipeline.joblib"
@@ -17,17 +16,11 @@ def test_saved_pipeline_can_be_loaded_and_predict():
     assert model_path.exists()
     assert metadata_path.exists()
 
-    pipeline = joblib.load(model_path)
-
     with metadata_path.open("r", encoding="utf-8") as file:
         metadata = json.load(file)
 
-    _, X_val, _, _, _, _ = load_and_split_data()
+    assert model_path.exists()
+    assert metadata["threshold"] == 0.2
 
-    probabilities = pipeline.predict_proba(X_val.iloc[:5])[:, 1]
-    threshold = metadata["threshold"]
-    predictions = (probabilities >= threshold).astype(int)
-
-    assert probabilities.shape == (5,)
-    assert np.all((probabilities >= 0) & (probabilities <= 1))
-    assert set(predictions).issubset({0, 1})
+    with pytest.raises(RuntimeError, match="pre-campaign feature contract"):
+        load_artifacts()

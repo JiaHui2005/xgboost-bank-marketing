@@ -7,32 +7,21 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from src.feature_contract import (
+    DROPPED_PRE_CAMPAIGN_FEATURES,
+    PRE_CAMPAIGN_FEATURES,
+)
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 MODEL_PATH = ROOT_DIR / "models" / "xgboost_pipeline.joblib"
 METADATA_PATH = ROOT_DIR / "models" / "metadata.json"
 
-REQUIRED_COLUMNS = [
-    "age",
-    "job",
-    "marital",
-    "education",
-    "default",
-    "balance",
-    "housing",
-    "loan",
-    "contact",
-    "day",
-    "month",
-    "pdays",
-    "previous",
-    "poutcome",
-]
+REQUIRED_COLUMNS = PRE_CAMPAIGN_FEATURES
 
 NUMERICAL_COLUMNS = [
     "age",
     "balance",
-    "day",
     "pdays",
     "previous",
 ]
@@ -75,19 +64,23 @@ def load_artifacts():
             "Metadata threshold must be a finite number between 0 and 1."
         )
 
-    model_features = getattr(pipeline, "feature_names_in_", None)
     metadata_dropped_features = metadata.get("dropped_features")
     if isinstance(metadata_dropped_features, list):
-        model_uses_campaign = "campaign" not in metadata_dropped_features
-    else:
-        model_uses_campaign = (
-            model_features is not None and "campaign" in model_features
+        unexcluded_features = set(DROPPED_PRE_CAMPAIGN_FEATURES) - set(
+            metadata_dropped_features
         )
-    if model_uses_campaign:
+        model_uses_excluded_features = bool(unexcluded_features)
+    else:
+        model_features = getattr(pipeline, "feature_names_in_", None)
+        model_uses_excluded_features = (
+            model_features is None
+            or bool(set(model_features).intersection(DROPPED_PRE_CAMPAIGN_FEATURES))
+        )
+    if model_uses_excluded_features:
         raise RuntimeError(
-            "The saved model uses the 'campaign' feature, which is unavailable "
-            "before a campaign. Retrain the model without this feature before "
-            "running pre-campaign predictions."
+            "The saved model is incompatible with the pre-campaign feature "
+            "contract. Retrain the model without duration, campaign, contact, "
+            "day, and month before running pre-campaign predictions."
         )
 
     return pipeline, metadata

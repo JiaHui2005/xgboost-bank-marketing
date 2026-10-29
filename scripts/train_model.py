@@ -6,6 +6,10 @@ import joblib
 from sklearn.model_selection import train_test_split
 
 from src.data_loader import DataLoader, encode_binary_target
+from src.feature_contract import (
+    DROPPED_PRE_CAMPAIGN_FEATURES,
+    PRE_CAMPAIGN_FEATURES,
+)
 from src.preprocessor import DataPreprocessor
 from src.model_trainer import ModelTrainer
 from src.model_evaluator import ModelEvaluator
@@ -15,9 +19,7 @@ def load_and_split_data():
     loader = DataLoader("data/raw/bank-full.csv")
     df = loader.load_data()
 
-    df = df.drop(columns=["duration"])
-
-    X = df.drop(columns=["y"])
+    X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
 
     X_train_val, X_test, y_train_val, y_test = train_test_split(
@@ -104,7 +106,7 @@ if __name__ == "__main__":
         "model_type": "XGBClassifier",
         "threshold": 0.20,
         "target_mapping": {"no": 0, "yes": 1},
-        "dropped_features": ["duration", "campaign"],
+        "dropped_features": DROPPED_PRE_CAMPAIGN_FEATURES,
         "validation_metrics": metrics,
     }
 

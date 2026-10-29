@@ -18,6 +18,18 @@ def test_load_and_split_data_has_expected_sizes(monkeypatch):
     df = pd.DataFrame({
         "age": np.arange(rows) % 60 + 18,
         "job": ["admin."] * rows,
+        "marital": ["single"] * rows,
+        "education": ["secondary"] * rows,
+        "default": ["no"] * rows,
+        "balance": np.arange(rows),
+        "housing": ["no"] * rows,
+        "loan": ["no"] * rows,
+        "pdays": np.full(rows, -1),
+        "previous": np.zeros(rows),
+        "poutcome": ["unknown"] * rows,
+        "contact": ["cellular"] * rows,
+        "day": np.arange(rows) % 31 + 1,
+        "month": ["may"] * rows,
         "campaign": np.arange(rows) % 5 + 1,
         "duration": np.arange(rows) + 1,
         "y": ["yes", "no"] * (rows // 2),
@@ -45,7 +57,9 @@ def test_load_and_split_data_has_expected_sizes(monkeypatch):
 
     assert "duration" not in X_train.columns
     assert "y" not in X_train.columns
-    assert "campaign" in X_train.columns  # Retained as raw data, not a model feature.
+    assert not {
+        "campaign", "contact", "day", "month"
+    }.intersection(X_train.columns)
     assert set(y_train.unique()) == {0, 1}
 
 
@@ -54,6 +68,9 @@ def test_build_models_returns_both_models():
         "age": [25, 35, 45, 55],
         "job": ["admin.", "technician", "admin.", "services"],
         "campaign": [1, 2, 1, 3],
+        "contact": ["cellular"] * 4,
+        "day": [1, 2, 3, 4],
+        "month": ["jan"] * 4,
     })
 
     models = build_models(X_train)
@@ -71,7 +88,9 @@ def test_build_models_returns_both_models():
             for _, _, columns in preprocessor.transformers
             for column in columns
         ]
-        assert "campaign" not in selected_columns
+        assert not {
+            "campaign", "contact", "day", "month"
+        }.intersection(selected_columns)
 
 
 @pytest.mark.parametrize("scale_numeric", [False, True])
