@@ -103,11 +103,11 @@ The dataset contains customer demographic information, financial information, an
 
 
 
-The `duration` feature is excluded because it is only known after a call. The `campaign` feature is also excluded: it counts contacts in the current campaign, including the last contact, and is not available when customers are classified before the campaign.
+The prediction point is before the current marketing campaign begins. The model therefore excludes `duration` (known only after a call), `campaign` (counts current-campaign contacts), and `contact`, `day`, and `month` (attributes of the current contact in this dataset).
 
 
 
-Using either feature would leak information unavailable at the pre-campaign prediction point and make the model less representative of deployment.
+The historical features `pdays`, `previous`, and `poutcome` are retained only under the assumption that they contain information available before the current campaign. This timing must be confirmed against the operational data source before deployment.
 
 
 
@@ -426,7 +426,7 @@ The script:
 
 1\. Loads and splits the dataset.
 
-2\. Excludes `duration` and `campaign` from the model's preprocessing features.
+2\. Uses the pre-campaign feature contract, excluding `duration`, `campaign`, `contact`, `day`, and `month`.
 
 3\. Fits the preprocessing and XGBoost pipeline.
 
@@ -470,7 +470,7 @@ The project provides a command-line interface for generating predictions from a 
 
 
 
-The input CSV must use a semicolon (`;`) delimiter and include the following 14 model features:
+The input CSV must use a semicolon (`;`) delimiter and include the following 11 pre-campaign model features:
 
 
 
@@ -478,7 +478,7 @@ The input CSV must use a semicolon (`;`) delimiter and include the following 14 
 
 age, job, marital, education, default,
 
-balance, housing, loan, contact, day, month,
+balance, housing, loan,
 
 pdays, previous, poutcome
 
@@ -486,7 +486,7 @@ pdays, previous, poutcome
 
 
 
-Neither `duration` nor `campaign` is required. Additional columns may be present in the input file, but the prediction pipeline ignores them; in particular, `campaign` must not be used for predictions made before the campaign.
+`duration`, `campaign`, `contact`, `day`, and `month` are excluded and are not required. Additional columns may be present in the input file, but the prediction pipeline ignores them. The historical features `pdays`, `previous`, and `poutcome` are valid only if they are available before the current campaign starts.
 
 Missing feature values are accepted and imputed by the fitted pipeline using statistics/categories learned during training. Infinite numeric values, non-numeric values in numeric columns, and non-text values in categorical columns are rejected.
 
@@ -589,7 +589,7 @@ The tests cover binary-label validation, model evaluation, missing-value imputat
 
 
 
-At the latest recorded verification, **28 tests passed**.
+At the latest recorded verification, **53 tests passed**.
 
 
 

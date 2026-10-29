@@ -42,3 +42,6 @@ data/processed/model_comparison.csv
 build/
 dist/
 *.egg-info/
+
+# Local project plan
+/PLAN.md

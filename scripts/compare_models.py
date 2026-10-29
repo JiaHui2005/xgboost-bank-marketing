@@ -10,6 +10,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.data_loader import DataLoader, encode_binary_target
+from src.feature_contract import PRE_CAMPAIGN_FEATURES
 from src.model_evaluator import ModelEvaluator
 from src.model_trainer import ModelTrainer
 
@@ -24,9 +25,7 @@ def load_and_split_data():
     loader = DataLoader("data/raw/bank-full.csv")
     df = loader.load_data()
 
-    df = df.drop(columns=["duration"])
-
-    X = df.drop(columns=["y"])
+    X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
 
     X_train_val, X_test, y_train_val, y_test = train_test_split(
@@ -54,14 +53,16 @@ def build_preprocessor(X_train, scale_numeric=False):
         include=["object", "category", "string"]
     ).columns.tolist()
     categorical_columns = [
-        column for column in categorical_columns if column != "campaign"
+        column for column in categorical_columns
+        if column in PRE_CAMPAIGN_FEATURES
     ]
 
     numerical_columns = X_train.select_dtypes(
         include=["number"]
     ).columns.tolist()
     numerical_columns = [
-        column for column in numerical_columns if column != "campaign"
+        column for column in numerical_columns
+        if column in PRE_CAMPAIGN_FEATURES
     ]
 
     categorical_transformer = Pipeline(
