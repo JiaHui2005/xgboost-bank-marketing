@@ -655,6 +655,11 @@ Both artifacts must be available before running batch prediction. Running the tr
 
 
 
+Known limitations:
+
+- **Predictive, not causal.** The model estimates which clients are more likely to subscribe given pre-campaign features. It does not measure the effect of contacting a client, and feature associations should not be read as causes of subscription.
+- **No customer identifier.** `bank-full.csv` has no client ID column, so repeated records for the same client cannot be detected or grouped. A group-aware split is not possible; the same client could appear in both the training and validation portions, which may make validation metrics optimistic.
+
 Potential extensions include:
 
 
@@ -669,8 +674,6 @@ Potential extensions include:
 - Adding feature importance analysis and model interpretability.
 
 - Adding a REST API for inference.
-
-- Setting up continuous integration to run tests automatically.
 
 
 
