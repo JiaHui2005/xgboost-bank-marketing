@@ -37,6 +37,8 @@ data/processed/predictions.csv
 # Generated prediction outputs
 data/processed/predictions.csv
 data/processed/model_comparison.csv
+data/processed/time_window_metrics.csv
+data/processed/time_window_summary.csv
 
 # Python build artifacts
 build/

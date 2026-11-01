@@ -24,6 +24,7 @@ A machine learning project that predicts whether a bank customer will subscribe 
 
 - [Model Performance](#model-performance)
 - [Baseline Comparison](#baseline-comparison)
+- [Stability Across Time Windows](#stability-across-time-windows)
 
 - [Training](#training)
 
@@ -420,6 +421,34 @@ uv run python scripts/compare_models.py
 The script trains both models, reports validation metrics only, and saves them to `data/processed/model_comparison.csv`. It does not create or score a test split.
 
 The threshold is held fixed at `0.20` for this comparison. It should not be described as optimized unless a separate validation-based threshold-selection experiment has been performed.
+
+## Stability Across Time Windows
+
+A single 80/20 split gives one point estimate. To see how much results depend on the period evaluated, both models are retrained on an expanding window (`TimeSeriesSplit`, 5 windows): each window trains on all earlier rows and validates on the next 7,535 rows, preserving the UCI row order. Hyperparameters and the `0.20` threshold are the same as above and were not tuned per window.
+
+```bash
+uv run python scripts/evaluate_time_windows.py
+```
+
+Per-window metrics are saved to `data/processed/time_window_metrics.csv` and the summary to `data/processed/time_window_summary.csv`.
+
+| Window | Train rows | Validation rows | Positive rate | XGBoost AP | LogReg AP | XGBoost ROC-AUC | LogReg ROC-AUC | XGBoost recall @0.20 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 7,536 | 7,535 | 5.2% | 0.060 | 0.067 | 0.534 | 0.567 | 0.003 |
+| 2 | 15,071 | 7,535 | 6.2% | 0.069 | 0.079 | 0.528 | 0.553 | 0.000 |
+| 3 | 22,606 | 7,535 | 5.9% | 0.072 | 0.057 | 0.555 | 0.505 | 0.002 |
+| 4 | 30,141 | 7,535 | 13.6% | 0.232 | 0.250 | 0.658 | 0.663 | 0.008 |
+| 5 | 37,676 | 7,535 | 36.3% | 0.501 | 0.564 | 0.659 | 0.688 | 0.407 |
+| **Mean ± std** | | | | **0.187 ± 0.190** | **0.203 ± 0.217** | **0.587 ± 0.067** | **0.595 ± 0.077** | **0.084 ± 0.181** |
+
+What this shows:
+
+- **Results are period-dependent.** The positive rate rises from about 5% to 36% across the dataset, and AP largely tracks that base rate. Compare AP with each window's positive rate (a random model scores AP ≈ positive rate), not across windows.
+- **Ranking ability is weak with pre-campaign features.** ROC-AUC is 0.53–0.56 in the first three windows and about 0.66 in the last two. Removing current-contact features (`duration`, `campaign`, `contact`, `day`, `month`) removes most of the signal.
+- **The fixed `0.20` threshold does not transfer across periods.** Models trained on low-base-rate periods rarely exceed `0.20`, so recall is near zero in windows 1–4.
+- **XGBoost does not consistently beat the Logistic Regression baseline.** Logistic Regression has equal or higher mean AP and ROC-AUC; differences are within the spread across windows.
+
+The single 80/20 validation result should therefore be read as one period's estimate, not a stable performance level. These are still development-validation numbers, not an independent holdout.
 
 ## Training
 
