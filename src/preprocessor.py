@@ -1,3 +1,4 @@
+import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -22,6 +23,7 @@ class DataPreprocessor(BaseEstimator, TransformerMixin):
                                 SimpleImputer(
                                     strategy="constant",
                                     fill_value="__missing__",
+                                    keep_empty_features=True,
                                 ),
                             ),
                             (
@@ -43,12 +45,20 @@ class DataPreprocessor(BaseEstimator, TransformerMixin):
             ]
         )
 
+    def _normalize_missing(self, X):
+        """Replace pd.NA with np.nan in categorical columns."""
+        # SimpleImputer crashes comparing pd.NA from nullable string columns.
+        X = X.copy()
+        categorical = X[self.categorical_columns].astype(object)
+        X[self.categorical_columns] = categorical.where(categorical.notna(), np.nan)
+        return X
+
     def fit(self, X, y = None):
         """Learn preprocessing parameters from training data"""
-        self.transformer.fit(X, y)
+        self.transformer.fit(self._normalize_missing(X), y)
 
         return self
 
     def transform(self, X):
         """Transform features using the fitted transformer."""
-        return self.transformer.transform(X)
+        return self.transformer.transform(self._normalize_missing(X))

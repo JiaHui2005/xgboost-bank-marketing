@@ -156,6 +156,10 @@ def validate_input_data(df: pd.DataFrame) -> None:
 
     # Validate numerical features while allowing NaN for pipeline imputation.
     for column in NUMERICAL_COLUMNS:
+        if pd.api.types.is_bool_dtype(feature_df[column]):
+            raise ValueError(
+                f"Column '{column}' must contain numerical values."
+            )
         try:
             numeric_values = pd.to_numeric(
                 feature_df[column],

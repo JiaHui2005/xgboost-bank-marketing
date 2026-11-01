@@ -13,7 +13,7 @@ def test_encode_binary_target_maps_expected_labels():
 
 @pytest.mark.parametrize(
     "labels",
-    [["no", None], ["yes", "maybe"], ["no", float("nan")]],
+    [["no", None], ["yes", "maybe"], ["no", float("nan")], ["yes", pd.NA], ["no", ""]],
 )
 def test_encode_binary_target_rejects_missing_or_unknown_labels(labels):
     with pytest.raises(ValueError, match="missing or unsupported labels"):

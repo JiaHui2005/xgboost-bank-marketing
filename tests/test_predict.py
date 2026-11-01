@@ -396,3 +396,35 @@ def test_load_artifacts_rejects_incompatible_versioned_contract(
     with patch.object(predict_module.joblib, "load", return_value=pipeline):
         with pytest.raises(expected_error):
             predict_module.load_artifacts()
+
+
+def test_validate_input_data_rejects_negative_infinity():
+    df = create_valid_dataframe()
+    df["pdays"] = [float("-inf")]
+
+    with pytest.raises(ValueError, match="contains infinite values"):
+        validate_input_data(df)
+
+
+def test_validate_input_data_rejects_boolean_numeric_values():
+    df = create_valid_dataframe()
+    df["age"] = [True]
+
+    with pytest.raises(ValueError, match="Column 'age' must contain numerical values"):
+        validate_input_data(df)
+
+
+def test_validate_input_data_rejects_numeric_categorical_values():
+    df = create_valid_dataframe()
+    df["job"] = [3]
+
+    with pytest.raises(ValueError, match="Column 'job' must contain categorical text values"):
+        validate_input_data(df)
+
+
+def test_validate_input_data_allows_fully_missing_columns():
+    df = create_valid_dataframe()
+    df["job"] = [np.nan]
+    df["balance"] = [pd.NA]
+
+    validate_input_data(df)
