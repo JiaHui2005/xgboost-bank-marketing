@@ -121,6 +121,12 @@ The prediction point is before the current marketing campaign begins. The table 
 
 The UCI dictionary reports no missing attribute values. `unknown`, `-1`, and `0` are documented field values, not missing values. The preprocessing policy above describes handling for nulls if they occur in other input data.
 
+**No prior contact vs. missing data.** These are treated as different states on purpose:
+
+- *No prior contact* is a real, known fact about the client. It is encoded by the values themselves: `pdays = -1` and `previous = 0`, which always occur together in `bank-full.csv` (36,954 of 45,211 rows, 81.7%), and all of these rows have `poutcome = unknown`. The model receives these values unchanged, so XGBoost can learn a separate split for `pdays = -1` without an extra indicator column.
+- `poutcome = unknown` alone does not prove the client was never contacted: 5 rows have prior contacts but an `unknown` outcome. Use `pdays`/`previous` to identify clients with no history.
+- *Missing data* (`NaN`, `None`, `pd.NA`, a blank CSV field) means the value was not supplied. It is imputed (median for numeric, `__missing__` for categorical) and is never interpreted as "no prior contact". Upstream systems should send `-1`/`0`/`unknown` for clients with no history rather than leaving the fields blank.
+
 The model excludes `duration` (known only after a call), `campaign` (counts contacts in the current campaign), and `contact`, `day`, and `month` (attributes of the current contact). These are not available at the stated prediction point.
 
 
