@@ -1,16 +1,14 @@
-from pathlib import Path
-
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 
 from scripts.compare_models import build_models, evaluate_model
+from src.config import DATA_PATH, PROCESSED_DIR
 from src.data_loader import DataLoader, encode_binary_target
 from src.feature_contract import PRE_CAMPAIGN_FEATURES
 
-
 N_SPLITS = 5
-OUTPUT_PATH = Path("data/processed/time_window_metrics.csv")
-SUMMARY_PATH = Path("data/processed/time_window_summary.csv")
+OUTPUT_PATH = PROCESSED_DIR / "time_window_metrics.csv"
+SUMMARY_PATH = PROCESSED_DIR / "time_window_summary.csv"
 SUMMARY_METRICS = ["pr_auc", "roc_auc", "precision", "recall", "f1", "fpr"]
 
 
@@ -52,7 +50,7 @@ def summarize_time_windows(results, metrics=SUMMARY_METRICS):
 
 
 def main():
-    df = DataLoader("data/raw/bank-full.csv").load_data()
+    df = DataLoader(DATA_PATH).load_data()
     X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
 
@@ -63,7 +61,7 @@ def main():
     results.to_csv(OUTPUT_PATH, index=False)
     summary.to_csv(SUMMARY_PATH, index=False)
 
-    float_format = lambda value: f"{value:.4f}"
+    float_format = "{:.4f}".format
     print("Per-window validation metrics:")
     print(
         results[

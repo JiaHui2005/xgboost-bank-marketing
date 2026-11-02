@@ -1,13 +1,15 @@
 
-import pandas as pd
-import numpy as np
-import pytest
 import json
-from unittest.mock import patch
 from types import SimpleNamespace
+from unittest.mock import patch
+
+import numpy as np
+import pandas as pd
+import pytest
 
 import scripts.predict as predict_module
 from scripts.predict import REQUIRED_COLUMNS, validate_input_data
+from src.config import ROOT_DIR
 from src.feature_contract import DROPPED_PRE_CAMPAIGN_FEATURES
 
 
@@ -100,12 +102,7 @@ def test_prediction_uses_only_pre_campaign_features_and_ignores_excluded_columns
     df["duration"] = [100]
     input_path = tmp_path / "input.csv"
     df.to_csv(input_path, sep=";", index=False)
-    monkeypatch.setattr(
-        predict_module,
-        "parse_args",
-        lambda: type("Args", (), {"input": str(input_path)})(),
-    )
-    monkeypatch.setattr(predict_module, "ROOT_DIR", tmp_path)
+    output_path = tmp_path / "predictions.csv"
 
     class FakePipeline:
         def predict_proba(self, features):
@@ -118,12 +115,9 @@ def test_prediction_uses_only_pre_campaign_features_and_ignores_excluded_columns
         lambda: (FakePipeline(), {"threshold": 0.2}),
     )
 
-    predict_module.main()
+    predict_module.main(["--input", str(input_path), "--output", str(output_path)])
 
-    output = pd.read_csv(
-        tmp_path / "data" / "processed" / "predictions.csv",
-        sep=";",
-    )
+    output = pd.read_csv(output_path, sep=";")
     assert output.loc[0, "prediction_label"] == "yes"
     assert {"contact", "day", "month", "campaign", "duration"}.issubset(
         output.columns
@@ -428,3 +422,61 @@ def test_validate_input_data_allows_fully_missing_columns():
     df["balance"] = [pd.NA]
 
     validate_input_data(df)
+
+
+def fake_artifacts():
+    class FakePipeline:
+        def predict_proba(self, features):
+            return np.tile([0.9, 0.1], (len(features), 1))
+
+    return FakePipeline(), {"threshold": 0.2}
+
+
+def write_input(tmp_path):
+    input_path = tmp_path / "input.csv"
+    create_valid_dataframe().to_csv(input_path, sep=";", index=False)
+    return input_path
+
+
+def test_main_refuses_to_overwrite_existing_output_without_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(predict_module, "load_artifacts", fake_artifacts)
+    input_path = write_input(tmp_path)
+    output_path = tmp_path / "out.csv"
+    output_path.write_text("keep me")
+
+    with pytest.raises(ValueError, match="already exists.*--overwrite"):
+        predict_module.main(["--input", str(input_path), "--output", str(output_path)])
+    assert output_path.read_text() == "keep me"
+
+    predict_module.main(
+        ["--input", str(input_path), "--output", str(output_path), "--overwrite"]
+    )
+    assert "prediction_label" in output_path.read_text()
+
+
+def test_main_never_overwrites_the_input_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(predict_module, "load_artifacts", fake_artifacts)
+    input_path = write_input(tmp_path)
+    original = input_path.read_text()
+
+    with pytest.raises(ValueError, match="must differ from the input"):
+        predict_module.main(
+            ["--input", str(input_path), "--output", str(input_path), "--overwrite"]
+        )
+    assert input_path.read_text() == original
+
+
+def test_cli_reports_input_errors_without_traceback(tmp_path):
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "scripts/predict.py", "--input", str(tmp_path / "missing.csv")],
+        cwd=ROOT_DIR,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Error: Input file not found" in result.stderr
+    assert "Traceback" not in result.stderr

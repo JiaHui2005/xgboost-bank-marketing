@@ -1,23 +1,18 @@
 
-from pathlib import Path
-
 import pandas as pd
 
 from scripts.compare_models import build_models, load_and_split_data
+from src.config import PROCESSED_DIR, THRESHOLD
 
-
-THRESHOLD = 0.22
-OUTPUT_PATH = Path("data/processed/group_error_rates.csv")
+OUTPUT_PATH = PROCESSED_DIR / "group_error_rates.csv"
 
 CATEGORICAL_FEATURES = [
     "job",
     "education",
-    "contact",
     "poutcome",
     "marital",
     "housing",
     "loan",
-    "month",
 ]
 
 
@@ -44,7 +39,7 @@ def add_group_error_rates(summary: pd.DataFrame) -> pd.DataFrame:
 
 
 def main():
-    X_train, X_val, _, y_train, y_val, _ = load_and_split_data()
+    X_train, X_val, y_train, y_val = load_and_split_data()
 
     model = build_models(X_train)["XGBoost"]
     print("Training XGBoost...")
@@ -108,7 +103,7 @@ def main():
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(OUTPUT_PATH, index=False)
 
-    for feature in ["job", "contact", "poutcome", "education"]:
+    for feature in ["job", "poutcome", "education"]:
         subset = result[result["feature"] == feature]
 
         print(f"\n{'=' * 65}")

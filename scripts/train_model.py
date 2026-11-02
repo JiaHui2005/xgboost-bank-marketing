@@ -2,30 +2,45 @@ import json
 import sys
 from datetime import datetime, timezone
 from importlib.metadata import version
-from pathlib import Path
 
 import joblib
 
-from src.data_loader import DataLoader, encode_binary_target
+from src.config import (
+    DATA_PATH,
+    MODELS_DIR,
+    SEED,
+    THRESHOLD,
+    TRAIN_FRACTION,
+    XGB_PARAMS,
+)
+from src.data_loader import (
+    DataLoader,
+    check_training_data,
+    encode_binary_target,
+)
 from src.feature_contract import (
     DROPPED_PRE_CAMPAIGN_FEATURES,
     PRE_CAMPAIGN_FEATURES,
 )
-from src.preprocessor import DataPreprocessor
-from src.model_trainer import ModelTrainer
 from src.model_evaluator import ModelEvaluator
+from src.model_trainer import ModelTrainer
+from src.preprocessor import DataPreprocessor
+
 
 def load_and_split_data():
     """Load data and split it chronologically into train and validation sets."""
-    loader = DataLoader("data/raw/bank-full.csv")
+    loader = DataLoader(DATA_PATH)
     df = loader.load_data()
 
     if len(df) < 2:
         raise ValueError("Dataset must contain at least two rows to split.")
 
+    report = check_training_data(df)
+    print(f"Data check passed: {report}")
+
     X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
-    split_index = int(len(df) * 0.8)
+    split_index = int(len(df) * TRAIN_FRACTION)
 
     return (
         X.iloc[:split_index],
@@ -53,14 +68,7 @@ def main():
 
     trainer = ModelTrainer(
         preprocessor=preprocessor,
-        model_params={
-            "n_estimators": 300,
-            "learning_rate": 0.05,
-            "max_depth": 4,
-            "min_child_weight": 5,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-        },
+        model_params=XGB_PARAMS,
     )
 
     trainer.fit(X_train, y_train)
@@ -69,7 +77,7 @@ def main():
     print(f"Categorical features: {len(categorical_columns)}")
     print(f"Numerical features: {len(numerical_columns)}")
 
-    threshold = 0.20
+    threshold = THRESHOLD
     evaluator = ModelEvaluator(threshold=threshold)
 
     y_val_proba = trainer.predict_proba(X_val)
@@ -82,7 +90,7 @@ def main():
     print("\nConfusion matrix:")
     print(evaluator.get_confusion_matrix())
 
-    models_dir = Path("models")
+    models_dir = MODELS_DIR
     models_dir.mkdir(parents=True, exist_ok=True)
 
     model_path = models_dir / "xgboost_pipeline.joblib"
@@ -102,13 +110,13 @@ def main():
             package: version(package)
             for package in ("numpy", "pandas", "scikit-learn", "xgboost")
         },
-        "seed": 42,
+        "seed": SEED,
         "trained_at_utc": datetime.now(timezone.utc).isoformat(),
         "data_version": "UCI Bank Marketing bank-full.csv (ordered rows)",
         "split": {
             "strategy": "ordered",
-            "train_fraction": 0.8,
-            "validation_fraction": 0.2,
+            "train_fraction": TRAIN_FRACTION,
+            "validation_fraction": round(1 - TRAIN_FRACTION, 2),
         },
         "validation_metrics": metrics,
     }

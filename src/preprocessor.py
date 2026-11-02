@@ -5,6 +5,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+
 class DataPreprocessor(BaseEstimator, TransformerMixin):
     """Preprocess categorical and numerical features"""
 

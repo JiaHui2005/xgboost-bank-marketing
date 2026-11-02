@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.feature_contract import PRE_CAMPAIGN_FEATURES
 from scripts.compare_models import (
     build_models,
     build_preprocessor,
@@ -11,13 +10,14 @@ from scripts.compare_models import (
     load_and_split_data,
     main,
 )
+from src.feature_contract import PRE_CAMPAIGN_FEATURES
 
 
 def test_load_and_split_data_uses_ordered_80_20_split(monkeypatch):
     """Check temporal order, 80/20 sizes, and leakage-feature removal."""
     rows = 1000
     df = pd.DataFrame({
-        "age": np.arange(rows),
+        "age": np.full(rows, 40),
         "job": ["admin."] * rows,
         "marital": ["single"] * rows,
         "education": ["secondary"] * rows,
@@ -54,8 +54,8 @@ def test_load_and_split_data_uses_ordered_80_20_split(monkeypatch):
 
     assert len(X_train) == 800
     assert len(X_val) == 200
-    assert X_train["age"].tolist() == list(range(800))
-    assert X_val["age"].tolist() == list(range(800, 1000))
+    assert X_train["balance"].tolist() == list(range(800))
+    assert X_val["balance"].tolist() == list(range(800, 1000))
 
     assert "duration" not in X_train.columns
     assert "y" not in X_train.columns

@@ -14,4 +14,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
+      - run: uv run ruff check .
       - run: uv run pytest -q

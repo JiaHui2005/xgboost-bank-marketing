@@ -1,8 +1,6 @@
 
-from pathlib import Path
-
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -14,10 +12,10 @@ from scripts.compare_models import (
     build_models,
     load_and_split_data,
 )
+from src.config import PROCESSED_DIR, THRESHOLD
 
-
-OUTPUT_PATH = Path("data/processed/threshold_comparison.csv")
-CURRENT_THRESHOLD = 0.20
+OUTPUT_PATH = PROCESSED_DIR / "threshold_comparison.csv"
+CURRENT_THRESHOLD = THRESHOLD
 
 
 def evaluate_thresholds(y_true, probabilities, thresholds):

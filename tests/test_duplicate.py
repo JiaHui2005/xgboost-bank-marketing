@@ -1,5 +1,5 @@
-from src.data_loader import DataLoader
 from src.data_analyzer import DataAnalyzer
+from src.data_loader import DataLoader
 
 
 def main() -> None:

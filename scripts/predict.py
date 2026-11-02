@@ -1,21 +1,21 @@
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
 
+from src.config import MODELS_DIR, PROCESSED_DIR, SEED, THRESHOLD
 from src.feature_contract import (
     DROPPED_PRE_CAMPAIGN_FEATURES,
     PRE_CAMPAIGN_FEATURES,
 )
 
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-MODEL_PATH = ROOT_DIR / "models" / "xgboost_pipeline.joblib"
-METADATA_PATH = ROOT_DIR / "models" / "metadata.json"
+MODEL_PATH = MODELS_DIR / "xgboost_pipeline.joblib"
+METADATA_PATH = MODELS_DIR / "metadata.json"
 
 REQUIRED_COLUMNS = PRE_CAMPAIGN_FEATURES
 
@@ -97,8 +97,8 @@ def load_artifacts():
         or metadata["feature_names"] != REQUIRED_COLUMNS
         or metadata["dropped_features"] != DROPPED_PRE_CAMPAIGN_FEATURES
         or metadata["target_mapping"] != {"no": 0, "yes": 1}
-        or metadata["threshold"] != 0.20
-        or metadata["seed"] != 42
+        or metadata["threshold"] != THRESHOLD
+        or metadata["seed"] != SEED
     ):
         raise RuntimeError(
             "The saved model is incompatible with the pre-campaign feature "
@@ -196,7 +196,7 @@ def validate_input_data(df: pd.DataFrame) -> None:
             )
 
 
-def parse_args():
+def parse_args(argv=None):
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Predict bank marketing subscription probabilities."
@@ -206,21 +206,39 @@ def parse_args():
         required=True,
         help="Path to the input CSV file.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=PROCESSED_DIR / "predictions.csv",
+        help="Where to write predictions (default: data/processed/predictions.csv).",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace the output file if it already exists.",
+    )
+    return parser.parse_args(argv)
 
 
-def main():
+def main(argv=None):
     """Load input data, predict probabilities, and save results."""
-    args = parse_args()
+    args = parse_args(argv)
 
-    input_path = Path(args.input)
-
-    if not input_path.is_absolute():
-        input_path = Path.cwd() / input_path
+    input_path = Path(args.input).resolve()
+    output_path = args.output.resolve()
 
     if not input_path.is_file():
         raise FileNotFoundError(
-            f"Input file not found: {input_path}"
+            f"Input file not found: {input_path}. Check the --input path."
+        )
+
+    if output_path == input_path:
+        raise ValueError("--output must differ from the input file.")
+
+    if output_path.exists() and not args.overwrite:
+        raise ValueError(
+            f"Output file already exists: {output_path}. Pass --overwrite to "
+            "replace it, or choose another --output path."
         )
 
     try:
@@ -274,9 +292,6 @@ def main():
         }
     )
 
-    output_path = (
-        ROOT_DIR / "data" / "processed" / "predictions.csv"
-    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -296,4 +311,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        sys.exit(f"Error: {exc}")

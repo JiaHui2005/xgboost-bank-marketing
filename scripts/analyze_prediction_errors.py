@@ -1,14 +1,11 @@
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
 from scripts.compare_models import build_models, load_and_split_data
+from src.config import PROCESSED_DIR, THRESHOLD
 
-
-THRESHOLD = 0.22
-OUTPUT_DIR = Path("data/processed")
+OUTPUT_DIR = PROCESSED_DIR
 
 CATEGORICAL_FEATURES = [
     "job",
@@ -17,22 +14,19 @@ CATEGORICAL_FEATURES = [
     "default",
     "housing",
     "loan",
-    "contact",
-    "month",
     "poutcome",
 ]
 
 NUMERIC_FEATURES = [
     "age",
     "balance",
-    "day",
     "pdays",
     "previous",
 ]
 
 
 def main():
-    X_train, X_val, _, y_train, y_val, _ = load_and_split_data()
+    X_train, X_val, y_train, y_val = load_and_split_data()
 
     model = build_models(X_train)["XGBoost"]
 
@@ -53,7 +47,7 @@ def main():
         default="FN",
     )
 
-    results = X_val.drop(columns=["campaign"], errors="ignore").copy()
+    results = X_val.copy()
     results["actual"] = actual
     results["probability"] = probabilities
     results["predicted"] = predictions

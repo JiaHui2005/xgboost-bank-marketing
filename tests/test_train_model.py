@@ -110,7 +110,7 @@ def test_training_evaluates_validation_only_and_does_not_score_test(
         "dump",
         lambda pipeline, path: dumped.append((pipeline, path)),
     )
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(train_module, "MODELS_DIR", tmp_path / "models")
 
     train_module.main()
 

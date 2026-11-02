@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.data_loader import encode_binary_target
+from src.data_loader import check_training_data, encode_binary_target
 
 
 def test_encode_binary_target_maps_expected_labels():
@@ -18,3 +18,49 @@ def test_encode_binary_target_maps_expected_labels():
 def test_encode_binary_target_rejects_missing_or_unknown_labels(labels):
     with pytest.raises(ValueError, match="missing or unsupported labels"):
         encode_binary_target(pd.Series(labels))
+
+
+def valid_training_frame():
+    return pd.DataFrame(
+        {
+            "age": [30, 45, 52, 30],
+            "job": ["admin.", "technician", None, "admin."],
+            "marital": ["single", "married", "married", "single"],
+            "education": ["secondary", "tertiary", "unknown", "secondary"],
+            "default": ["no", "no", "no", "no"],
+            "balance": [100, -50, 2000, 100],
+            "housing": ["yes", "no", "yes", "yes"],
+            "loan": ["no", "no", "yes", "no"],
+            "pdays": [-1, 90, -1, -1],
+            "previous": [0, 2, 0, 0],
+            "poutcome": ["unknown", "success", "unknown", "unknown"],
+            "y": ["no", "yes", "no", "no"],
+        }
+    )
+
+
+def test_check_training_data_reports_quality_summary():
+    report = check_training_data(valid_training_frame())
+
+    assert report["rows"] == 4
+    assert report["positive_rate"] == 0.25
+    assert report["duplicate_rows"] == 1
+    assert report["missing_rate"] == {"job": 0.25}
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda df: df.drop(columns=["balance"]), "missing required columns"),
+        (lambda df: df.assign(age=["30", "x", "52", "30"]), "'age' must be numeric"),
+        (lambda df: df.assign(age=[30, -5, 52, 30]), "'age' has values outside"),
+        (lambda df: df.assign(pdays=[-1, -7, -1, -1]), "'pdays' has values outside"),
+        (lambda df: df.assign(previous=[0, -1, 0, 0]), "'previous' has values outside"),
+        (lambda df: df.assign(housing=None), "'housing' is entirely missing"),
+        (lambda df: df.assign(y="no"), "both target classes"),
+        (lambda df: df.assign(y=["no", "maybe", "no", "no"]), "unsupported labels"),
+    ],
+)
+def test_check_training_data_rejects_invalid_data(change, message):
+    with pytest.raises(ValueError, match=message):
+        check_training_data(change(valid_training_frame()))

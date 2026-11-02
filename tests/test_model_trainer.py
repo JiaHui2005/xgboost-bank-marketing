@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.preprocessor import DataPreprocessor
 from src.model_trainer import ModelTrainer
+from src.preprocessor import DataPreprocessor
 
 
 @pytest.fixture

@@ -1,9 +1,10 @@
-from src.data_loader import DataLoader
+from src.config import DATA_PATH
 from src.data_analyzer import DataAnalyzer
+from src.data_loader import DataLoader
 
 
 def main() -> None:
-    loader = DataLoader("data/raw/bank-full.csv")
+    loader = DataLoader(DATA_PATH)
     dataframe = loader.load_data()
 
     analyzer = DataAnalyzer(dataframe)

@@ -2,6 +2,7 @@
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
+from src.config import SEED
 from src.preprocessor import DataPreprocessor
 
 
@@ -22,7 +23,7 @@ class ModelTrainer:
         model = XGBClassifier(
             objective="binary:logistic",
             eval_metric="logloss",
-            random_state=42,
+            random_state=SEED,
             n_jobs=-1,
             **self.model_params,
         )

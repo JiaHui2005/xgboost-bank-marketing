@@ -1,6 +1,4 @@
 
-from pathlib import Path
-
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -8,28 +6,40 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.data_loader import DataLoader, encode_binary_target
+from src.config import (
+    DATA_PATH,
+    PROCESSED_DIR,
+    SEED,
+    THRESHOLD,
+    TRAIN_FRACTION,
+    XGB_PARAMS,
+)
+from src.data_loader import (
+    DataLoader,
+    check_training_data,
+    encode_binary_target,
+)
 from src.feature_contract import PRE_CAMPAIGN_FEATURES
 from src.model_evaluator import ModelEvaluator
 from src.model_trainer import ModelTrainer
 
-
-RANDOM_STATE = 42
-THRESHOLD = 0.20
-OUTPUT_PATH = Path("data/processed/model_comparison.csv")
+OUTPUT_PATH = PROCESSED_DIR / "model_comparison.csv"
 
 
 def load_and_split_data():
     """Load data and split chronologically into train and validation sets."""
-    loader = DataLoader("data/raw/bank-full.csv")
+    loader = DataLoader(DATA_PATH)
     df = loader.load_data()
 
     if len(df) < 2:
         raise ValueError("Dataset must contain at least two rows to split.")
 
+    report = check_training_data(df)
+    print(f"Data check passed: {report}")
+
     X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
-    split_index = int(len(df) * 0.8)
+    split_index = int(len(df) * TRAIN_FRACTION)
 
     return (
         X.iloc[:split_index],
@@ -93,14 +103,7 @@ def build_models(X_train):
     """Build XGBoost and Logistic Regression models"""
     xgb_trainer = ModelTrainer(
         preprocessor=build_preprocessor(X_train),
-        model_params={
-            "n_estimators": 300,
-            "learning_rate": 0.05,
-            "max_depth": 4,
-            "min_child_weight": 5,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-        },
+        model_params=XGB_PARAMS,
     )
 
     logistic_pipeline = Pipeline(
@@ -113,7 +116,7 @@ def build_models(X_train):
                 "classifier",
                 LogisticRegression(
                     max_iter=1000,
-                    random_state=RANDOM_STATE,
+                    random_state=SEED,
                 ),
             ),
         ]

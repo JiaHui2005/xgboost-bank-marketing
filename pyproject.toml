@@ -16,6 +16,7 @@ dependencies = [
 dev = [
     "hatchling>=1.32.4",
     "pytest>=9.1.1",
+    "ruff>=0.17.3",
 ]
 
 [build-system]
@@ -24,3 +25,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.ruff]
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

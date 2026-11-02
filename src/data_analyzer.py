@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 class DataAnalyzer:
     """Analyze the Bank Marketing dataset"""
 

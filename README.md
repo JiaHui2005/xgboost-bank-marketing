@@ -19,6 +19,7 @@ Predicts, **before a marketing campaign starts**, which bank clients are most li
 - [Quick Start](#quick-start)
 - [Training and Experiments](#training-and-experiments)
 - [Batch Prediction](#batch-prediction)
+- [Model Artifact](#model-artifact)
 - [Testing and CI](#testing-and-ci)
 - [Project Structure](#project-structure)
 - [Limitations and Future Improvements](#limitations-and-future-improvements)
@@ -94,7 +95,7 @@ flowchart LR
 
 - Preprocessing and the classifier are one scikit-learn `Pipeline`, so training and inference apply identical transformations, and imputation statistics are fitted on training rows only.
 - Numeric features: median imputation. Categorical features: a `__missing__` category, then one-hot encoding that ignores categories unseen during training.
-- XGBoost settings: `n_estimators=300`, `learning_rate=0.05`, `max_depth=4`, `min_child_weight=5`, `subsample=0.8`, `colsample_bytree=0.8`, `random_state=42`.
+- XGBoost settings: `n_estimators=300`, `learning_rate=0.05`, `max_depth=4`, `min_child_weight=5`, `subsample=0.8`, `colsample_bytree=0.8`, `random_state=42`. These, the `0.20` threshold, the 80% train fraction, and all file paths live in one place, `src/config.py`; every script imports them from there. Training twice with the same seed gives identical predictions (covered by a test).
 - `models/metadata.json` records the feature list, dropped features, threshold, target mapping, seed, split, Python and dependency versions, training time, and validation metrics. Batch prediction refuses an artifact whose metadata or pipeline columns do not match the current feature contract.
 
 ## Evaluation Strategy
@@ -182,9 +183,13 @@ Expected output (probabilities may differ slightly across platforms):
 
 Client `C002` has a previous successful campaign (`poutcome = success`) and scores highest. `C005` has blank `education` and `balance`, which the pipeline imputes.
 
+Predictions are written to `data/processed/predictions.csv`. Running the command again stops with an error rather than replacing that file; add `--overwrite` or pass a different `--output`.
+
 ## Training and Experiments
 
-These commands need `data/raw/bank-full.csv` and must be run from the project root.
+These commands need `data/raw/bank-full.csv`. Paths are resolved from the repository root, so they work from any directory.
+
+Before splitting, `train_model.py` and `compare_models.py` run a data check (`check_training_data` in `src/data_loader.py`). It stops on missing columns, non-numeric or out-of-range values (`age` outside 0–120, `pdays` not `-1` or ≥ 0, negative `previous`), a feature that is entirely missing, invalid labels, or a single target class. It prints row count, positive rate, missing rate per column, and duplicate rows. `bank-full.csv` passes with 45,211 rows, an 11.7% positive rate, no missing values, and 1,194 rows that repeat another row's features and label; without a client ID these cannot be confirmed as true duplicates, so they are reported rather than removed.
 
 | Command | What it does | Output |
 | --- | --- | --- |
@@ -193,17 +198,27 @@ These commands need `data/raw/bank-full.csv` and must be run from the project ro
 | `uv run python scripts/evaluate_time_windows.py` | Both models across 5 expanding time windows | `data/processed/time_window_metrics.csv`, `data/processed/time_window_summary.csv` |
 | `uv run python scripts/optimize_threshold.py` | Threshold trade-off table on validation (descriptive; does not change the threshold) | `data/processed/threshold_comparison.csv` |
 
+`analyze_prediction_errors.py` and `analyze_group_error_rates.py` break validation errors down by feature value at the same `0.20` threshold.
+
 `train_model.py` overwrites the checked-in model artifact. Retrain after changing the feature contract or training settings, since batch prediction rejects a mismatched artifact.
 
 ## Batch Prediction
 
 ```bash
-uv run python scripts/predict.py --input path/to/clients.csv
+uv run python scripts/predict.py --input path/to/clients.csv --output path/to/predictions.csv
 ```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--input` | required | Semicolon-delimited CSV to score |
+| `--output` | `data/processed/predictions.csv` | Where to write predictions |
+| `--overwrite` | off | Allow replacing an existing output file |
+
+The command never writes over its own input file, and refuses to replace an existing output unless `--overwrite` is given. Input problems are reported as a single `Error: ...` line that names the file or column and what to change, instead of a Python traceback.
 
 **Input.** A semicolon-delimited CSV containing the 11 contract features. Other columns (for example a client ID) are allowed and copied to the output; `duration`, `campaign`, `contact`, `day`, and `month` are not required. Missing values are accepted and imputed. The command rejects an empty file, missing or duplicate columns, infinite or non-numeric values (including `True`/`False`) in numeric columns, and non-text values in categorical columns.
 
-**Output.** `data/processed/predictions.csv` (overwritten on each run) with the input columns plus:
+**Output.** A semicolon-delimited CSV with the input columns plus:
 
 | Column | Description |
 | --- | --- |
@@ -213,15 +228,36 @@ uv run python scripts/predict.py --input path/to/clients.csv
 
 The threshold (`0.20`) is read from `models/metadata.json`, not hard-coded in the prediction logic.
 
+## Model Artifact
+
+The fitted pipeline is committed to Git so the project runs right after cloning, without the dataset. At 437 KB it does not need Git LFS or a separate release.
+
+| File | Size | SHA-256 |
+| --- | --- | --- |
+| `models/xgboost_pipeline.joblib` | 447,363 bytes | `23d042a55f47860e1a9a61b65ca4c19c33ffb3f3f4b80cd3a00efd7a5452a45f` |
+| `models/metadata.json` | 1,456 bytes | `60236bb5323378d5ccc8ae212046365b327e5161fad6d6981683345f5bd77ee6` |
+
+Verify a download with:
+
+```bash
+shasum -a 256 models/xgboost_pipeline.joblib models/metadata.json
+```
+
+A joblib file is only guaranteed to load with the library versions it was saved with; those are recorded in `metadata.json` under `dependency_versions` and pinned by `uv.lock`. Only load artifacts from a trusted source, since unpickling can run code. To regenerate the artifact, place the dataset and run `uv run python scripts/train_model.py`, then update the checksums above (the training timestamp in metadata changes on every run).
+
 ## Testing and CI
+
+```bash
+uv run ruff check .
+```
 
 ```bash
 uv run pytest -q
 ```
 
-Tests cover target validation, the feature contract, the chronological split (including that no test set is scored), preprocessing and imputation edge cases (`NaN`, `pd.NA`, nullable dtypes, all-missing columns), input validation, metric arithmetic (FPR/FNR, undefined groups), artifact and metadata compatibility, time-window evaluation, and inference with the saved model. They need neither the raw dataset nor network access.
+Tests cover target validation, training-data checks, config and training determinism, CLI behaviour (output overwrite guard, error messages), the feature contract, the chronological split (including that no test set is scored), preprocessing and imputation edge cases (`NaN`, `pd.NA`, nullable dtypes, all-missing columns), input validation, metric arithmetic (FPR/FNR, undefined groups), artifact and metadata compatibility, time-window evaluation, and inference with the saved model. They need neither the raw dataset nor network access.
 
-GitHub Actions (`.github/workflows/tests.yml`) installs dependencies from `uv.lock` and runs the suite on every push to `main` and on pull requests.
+Lint uses ruff with the rule set pinned in `pyproject.toml` (pyflakes errors, core pycodestyle errors, import order). GitHub Actions (`.github/workflows/tests.yml`) installs dependencies from `uv.lock`, then runs ruff and the test suite on every push to `main` and on pull requests.
 
 ## Project Structure
 
@@ -245,8 +281,9 @@ xgboost-bank-marketing/
 │   ├── predict.py
 │   └── analyze_*.py              # dataset, error and group-error analysis
 ├── src/
+│   ├── config.py                 # paths, seed, threshold, hyperparameters
 │   ├── feature_contract.py       # single source of the 11 features
-│   ├── data_loader.py            # CSV loading, target validation
+│   ├── data_loader.py            # CSV loading, target and data checks
 │   ├── preprocessor.py
 │   ├── model_trainer.py
 │   ├── model_evaluator.py
@@ -269,8 +306,7 @@ Known limitations:
 Potential extensions:
 
 - Choose the threshold from contact capacity or explicit FP/FN costs, and calibrate probabilities so they transfer across periods.
-- Centralize seed, threshold, and paths in one versioned config.
-- Add data quality checks before training (schema, ranges, duplicates, target distribution) and drift monitoring.
+- Monitor feature drift and per-cohort performance in production.
 - Add feature importance and model interpretability.
 
 ## License
