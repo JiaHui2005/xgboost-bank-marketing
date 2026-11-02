@@ -1,4 +1,3 @@
-
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
@@ -12,7 +11,7 @@ from sklearn.metrics import (
 
 
 class ModelEvaluator:
-    """Evaluate classification models using common metrics"""
+    """Evaluate classification models using common metrics."""
 
     def __init__(self, threshold: float = 0.5) -> None:
         if not 0 < threshold < 1:
@@ -21,7 +20,7 @@ class ModelEvaluator:
         self.threshold = threshold
 
     def evaluate(self, y_true, y_proba) -> dict[str, float]:
-        """Calculate classification metrics from positive-class probabilities"""
+        """Calculate classification metrics from positive-class probabilities."""
         y_true = np.asarray(y_true)
         y_proba = np.asarray(y_proba)
 
@@ -48,22 +47,14 @@ class ModelEvaluator:
         if len(np.unique(y_true)) != 2:
             raise ValueError("y_true must contain both binary classes")
 
-        self.confusion_matrix_ = confusion_matrix(
-            y_true, y_pred, labels=[0, 1]
-        )
+        self.confusion_matrix_ = confusion_matrix(y_true, y_pred, labels=[0, 1])
         tn, fp, fn, tp = self.confusion_matrix_.ravel()
 
         return {
             "accuracy": accuracy_score(y_true, y_pred),
-            "precision": precision_score(
-                y_true, y_pred, zero_division=0
-            ),
-            "recall": recall_score(
-                y_true, y_pred, zero_division=0
-            ),
-            "f1": f1_score(
-                y_true, y_pred, zero_division=0
-            ),
+            "precision": precision_score(y_true, y_pred, zero_division=0),
+            "recall": recall_score(y_true, y_pred, zero_division=0),
+            "f1": f1_score(y_true, y_pred, zero_division=0),
             "fpr": fp / (fp + tn),
             "fnr": fn / (fn + tp),
             "tn": int(tn),
@@ -78,8 +69,10 @@ class ModelEvaluator:
         }
 
     def get_confusion_matrix(self) -> np.ndarray:
-        """Return the confusion matrix from the latest evaluation"""
+        """Return the confusion matrix from the latest evaluation."""
         if not hasattr(self, "confusion_matrix_"):
-            raise RuntimeError("Evaluate the model before requesting the confusion matrix")
+            raise RuntimeError(
+                "Evaluate the model before requesting the confusion matrix"
+            )
 
         return self.confusion_matrix_

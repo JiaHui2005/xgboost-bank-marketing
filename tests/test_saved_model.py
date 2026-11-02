@@ -69,15 +69,24 @@ def test_saved_model_predicts_from_csv_with_empty_fields_and_nullable_dtypes():
     from scripts.predict import NUMERICAL_COLUMNS, validate_input_data
 
     row = {
-        "age": "30", "job": "technician", "marital": "single",
-        "education": "secondary", "default": "no", "balance": "100",
-        "housing": "yes", "loan": "no", "pdays": "-1", "previous": "0",
+        "age": "30",
+        "job": "technician",
+        "marital": "single",
+        "education": "secondary",
+        "default": "no",
+        "balance": "100",
+        "housing": "yes",
+        "loan": "no",
+        "pdays": "-1",
+        "previous": "0",
         "poutcome": "unknown",
     }
     # Row 1: blank numeric and categorical fields; `job` is blank in every row.
     lines = [";".join(PRE_CAMPAIGN_FEATURES)]
     for blanks in ({"job", "age"}, {"job"}):
-        lines.append(";".join("" if c in blanks else row[c] for c in PRE_CAMPAIGN_FEATURES))
+        lines.append(
+            ";".join("" if c in blanks else row[c] for c in PRE_CAMPAIGN_FEATURES)
+        )
     from_csv = pd.read_csv(StringIO("\n".join(lines)), sep=";")
 
     nullable = from_csv.copy()

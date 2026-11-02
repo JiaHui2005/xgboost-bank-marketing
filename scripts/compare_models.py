@@ -1,4 +1,3 @@
-
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -6,19 +5,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.config import (
-    DATA_PATH,
-    PROCESSED_DIR,
-    SEED,
-    THRESHOLD,
-    TRAIN_FRACTION,
-    XGB_PARAMS,
-)
-from src.data_loader import (
-    DataLoader,
-    check_training_data,
-    encode_binary_target,
-)
+from src.config import PROCESSED_DIR, SEED, THRESHOLD, XGB_PARAMS
+from src.data_loader import load_and_split_data
 from src.feature_contract import PRE_CAMPAIGN_FEATURES
 from src.model_evaluator import ModelEvaluator
 from src.model_trainer import ModelTrainer
@@ -26,45 +14,18 @@ from src.model_trainer import ModelTrainer
 OUTPUT_PATH = PROCESSED_DIR / "model_comparison.csv"
 
 
-def load_and_split_data():
-    """Load data and split chronologically into train and validation sets."""
-    loader = DataLoader(DATA_PATH)
-    df = loader.load_data()
-
-    if len(df) < 2:
-        raise ValueError("Dataset must contain at least two rows to split.")
-
-    report = check_training_data(df)
-    print(f"Data check passed: {report}")
-
-    X = df[PRE_CAMPAIGN_FEATURES].copy()
-    y = encode_binary_target(df["y"])
-    split_index = int(len(df) * TRAIN_FRACTION)
-
-    return (
-        X.iloc[:split_index],
-        X.iloc[split_index:],
-        y.iloc[:split_index],
-        y.iloc[split_index:],
-    )
-
-
 def build_preprocessor(X_train, scale_numeric=False):
-    """Build a preprocessing transformer for categorical and numeric features"""
+    """Build a preprocessing transformer for categorical and numeric features."""
     categorical_columns = X_train.select_dtypes(
         include=["object", "category", "string"]
     ).columns.tolist()
     categorical_columns = [
-        column for column in categorical_columns
-        if column in PRE_CAMPAIGN_FEATURES
+        column for column in categorical_columns if column in PRE_CAMPAIGN_FEATURES
     ]
 
-    numerical_columns = X_train.select_dtypes(
-        include=["number"]
-    ).columns.tolist()
+    numerical_columns = X_train.select_dtypes(include=["number"]).columns.tolist()
     numerical_columns = [
-        column for column in numerical_columns
-        if column in PRE_CAMPAIGN_FEATURES
+        column for column in numerical_columns if column in PRE_CAMPAIGN_FEATURES
     ]
 
     categorical_transformer = Pipeline(
@@ -100,7 +61,7 @@ def build_preprocessor(X_train, scale_numeric=False):
 
 
 def build_models(X_train):
-    """Build XGBoost and Logistic Regression models"""
+    """Build XGBoost and Logistic Regression models."""
     xgb_trainer = ModelTrainer(
         preprocessor=build_preprocessor(X_train),
         model_params=XGB_PARAMS,
@@ -129,7 +90,7 @@ def build_models(X_train):
 
 
 def evaluate_model(name, model, X, y):
-    """Evaluate a fitted model using the configured classification threshold"""
+    """Evaluate a fitted model using the configured classification threshold."""
     probabilities = model.predict_proba(X)
 
     # ModelTrainer returns probabilities in the format expected by

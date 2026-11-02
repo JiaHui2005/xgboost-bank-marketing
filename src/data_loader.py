@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.config import DATA_PATH, TRAIN_FRACTION
 from src.feature_contract import PRE_CAMPAIGN_FEATURES
 
 
@@ -31,7 +32,9 @@ def check_training_data(df: pd.DataFrame) -> dict:
     """Reject unusable training data and summarise its quality."""
     missing_columns = sorted(set(PRE_CAMPAIGN_FEATURES + ["y"]) - set(df.columns))
     if missing_columns:
-        raise ValueError(f"Training data is missing required columns: {missing_columns}")
+        raise ValueError(
+            f"Training data is missing required columns: {missing_columns}"
+        )
 
     features = df[PRE_CAMPAIGN_FEATURES]
     for column in PRE_CAMPAIGN_FEATURES:
@@ -40,7 +43,9 @@ def check_training_data(df: pd.DataFrame) -> dict:
 
     for column, (is_valid, allowed) in NUMERIC_RULES.items():
         values = features[column]
-        if not pd.api.types.is_numeric_dtype(values) or pd.api.types.is_bool_dtype(values):
+        if not pd.api.types.is_numeric_dtype(values) or pd.api.types.is_bool_dtype(
+            values
+        ):
             raise ValueError(f"Feature '{column}' must be numeric.")
         present = values.dropna()
         if not is_valid(present).all():
@@ -62,14 +67,40 @@ def check_training_data(df: pd.DataFrame) -> dict:
 
 
 class DataLoader:
-    """Load datasets from CSV file"""
+    """Load datasets from CSV file."""
 
     def __init__(self, data_path: str | Path) -> None:
         self.data_path = Path(data_path)
 
     def load_data(self) -> pd.DataFrame:
-        """Load the Bank Marketing dataset"""
+        """Load the Bank Marketing dataset."""
         if not self.data_path.exists():
             raise FileNotFoundError(f"Dataset not found: {self.data_path}")
 
         return pd.read_csv(self.data_path, sep=";")
+
+
+def load_and_split_data(data_path=DATA_PATH):
+    """Load and check the dataset, then split rows chronologically.
+
+    The first TRAIN_FRACTION of rows are training data and the rest validation;
+    rows are never shuffled.
+    """
+    df = DataLoader(data_path).load_data()
+
+    if len(df) < 2:
+        raise ValueError("Dataset must contain at least two rows to split.")
+
+    report = check_training_data(df)
+    print(f"Data check passed: {report}")
+
+    X = df[PRE_CAMPAIGN_FEATURES].copy()
+    y = encode_binary_target(df["y"])
+    split_index = int(len(df) * TRAIN_FRACTION)
+
+    return (
+        X.iloc[:split_index],
+        X.iloc[split_index:],
+        y.iloc[:split_index],
+        y.iloc[split_index:],
+    )

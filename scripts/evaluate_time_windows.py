@@ -3,7 +3,7 @@ from sklearn.model_selection import TimeSeriesSplit
 
 from scripts.compare_models import build_models, evaluate_model
 from src.config import DATA_PATH, PROCESSED_DIR
-from src.data_loader import DataLoader, encode_binary_target
+from src.data_loader import DataLoader, check_training_data, encode_binary_target
 from src.feature_contract import PRE_CAMPAIGN_FEATURES
 
 N_SPLITS = 5
@@ -51,6 +51,7 @@ def summarize_time_windows(results, metrics=SUMMARY_METRICS):
 
 def main():
     df = DataLoader(DATA_PATH).load_data()
+    print(f"Data check passed: {check_training_data(df)}")
     X = df[PRE_CAMPAIGN_FEATURES].copy()
     y = encode_binary_target(df["y"])
 
@@ -65,7 +66,14 @@ def main():
     print("Per-window validation metrics:")
     print(
         results[
-            ["model", "window", "train_rows", "support", "val_positive_rate", *SUMMARY_METRICS]
+            [
+                "model",
+                "window",
+                "train_rows",
+                "support",
+                "val_positive_rate",
+                *SUMMARY_METRICS,
+            ]
         ].to_string(index=False, float_format=float_format)
     )
     print("\nSummary across windows:")

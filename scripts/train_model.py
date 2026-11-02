@@ -5,19 +5,8 @@ from importlib.metadata import version
 
 import joblib
 
-from src.config import (
-    DATA_PATH,
-    MODELS_DIR,
-    SEED,
-    THRESHOLD,
-    TRAIN_FRACTION,
-    XGB_PARAMS,
-)
-from src.data_loader import (
-    DataLoader,
-    check_training_data,
-    encode_binary_target,
-)
+from src.config import MODELS_DIR, SEED, THRESHOLD, TRAIN_FRACTION, XGB_PARAMS
+from src.data_loader import load_and_split_data
 from src.feature_contract import (
     DROPPED_PRE_CAMPAIGN_FEATURES,
     PRE_CAMPAIGN_FEATURES,
@@ -27,29 +16,6 @@ from src.model_trainer import ModelTrainer
 from src.preprocessor import DataPreprocessor
 
 
-def load_and_split_data():
-    """Load data and split it chronologically into train and validation sets."""
-    loader = DataLoader(DATA_PATH)
-    df = loader.load_data()
-
-    if len(df) < 2:
-        raise ValueError("Dataset must contain at least two rows to split.")
-
-    report = check_training_data(df)
-    print(f"Data check passed: {report}")
-
-    X = df[PRE_CAMPAIGN_FEATURES].copy()
-    y = encode_binary_target(df["y"])
-    split_index = int(len(df) * TRAIN_FRACTION)
-
-    return (
-        X.iloc[:split_index],
-        X.iloc[split_index:],
-        y.iloc[:split_index],
-        y.iloc[split_index:],
-    )
-
-
 def main():
     """Train on earlier rows and report validation metrics only."""
     X_train, X_val, y_train, y_val = load_and_split_data()
@@ -57,9 +23,7 @@ def main():
     categorical_columns = X_train.select_dtypes(
         include=["str", "object", "category"]
     ).columns.tolist()
-    numerical_columns = X_train.select_dtypes(
-        include=["number"]
-    ).columns.tolist()
+    numerical_columns = X_train.select_dtypes(include=["number"]).columns.tolist()
 
     preprocessor = DataPreprocessor(
         categorical_columns=categorical_columns,
@@ -126,6 +90,7 @@ def main():
 
     print(f"\nModel saved to: {model_path}")
     print(f"Metadata saved to: {metadata_path}")
+
 
 if __name__ == "__main__":
     main()

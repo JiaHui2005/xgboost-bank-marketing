@@ -191,7 +191,7 @@ Predictions are written to `data/processed/predictions.csv`. Running the command
 
 These commands need `data/raw/bank-full.csv`. Paths are resolved from the repository root, so they work from any directory.
 
-Before splitting, `train_model.py` and `compare_models.py` run a data check (`check_training_data` in `src/data_loader.py`). It stops on missing columns, non-numeric or out-of-range values (`age` outside 0–120, `pdays` not `-1` or ≥ 0, negative `previous`), a feature that is entirely missing, invalid labels, or a single target class. It prints row count, positive rate, missing rate per column, and duplicate rows. `bank-full.csv` passes with 45,211 rows, an 11.7% positive rate, no missing values, and 1,194 rows that repeat another row's features and label; without a client ID these cannot be confirmed as true duplicates, so they are reported rather than removed.
+Every training and evaluation script runs a data check (`check_training_data` in `src/data_loader.py`) before splitting. It stops on missing columns, non-numeric or out-of-range values (`age` outside 0–120, `pdays` not `-1` or ≥ 0, negative `previous`), a feature that is entirely missing, invalid labels, or a single target class. It prints row count, positive rate, missing rate per column, and duplicate rows. `bank-full.csv` passes with 45,211 rows, an 11.7% positive rate, no missing values, and 1,194 rows that repeat another row's features and label; without a client ID these cannot be confirmed as true duplicates, so they are reported rather than removed.
 
 | Command | What it does | Output |
 | --- | --- | --- |
@@ -254,12 +254,16 @@ uv run ruff check .
 ```
 
 ```bash
+uv run ruff format --check .
+```
+
+```bash
 uv run pytest -q
 ```
 
 Tests cover target validation, training-data checks, config and training determinism, CLI behaviour (output overwrite guard, error messages), the feature contract, the chronological split (including that no test set is scored), preprocessing and imputation edge cases (`NaN`, `pd.NA`, nullable dtypes, all-missing columns), input validation, metric arithmetic (FPR/FNR, undefined groups), artifact and metadata compatibility, time-window evaluation, and inference with the saved model. They need neither the raw dataset nor network access.
 
-Lint uses ruff with the rule set pinned in `pyproject.toml` (pyflakes errors, core pycodestyle errors, import order). GitHub Actions (`.github/workflows/tests.yml`) installs dependencies from `uv.lock`, then runs ruff and the test suite on every push to `main` and on pull requests.
+Code is formatted with `ruff format` and linted with ruff using the rule set pinned in `pyproject.toml` (pyflakes and core pycodestyle errors, whitespace, import order, bugbear). GitHub Actions (`.github/workflows/tests.yml`) installs dependencies from `uv.lock`, then runs the lint check, the format check and the test suite on every push to `main` and on pull requests.
 
 ## Project Structure
 
@@ -268,7 +272,7 @@ xgboost-bank-marketing/
 ├── .github/workflows/tests.yml   # CI: pytest on a clean install
 ├── data/
 │   ├── raw/                      # bank-full.csv (not committed)
-│   └── processed/                # experiment outputs and predictions
+│   └── processed/                # script outputs and predictions (not committed)
 ├── examples/
 │   └── sample_customers.csv      # 5 synthetic clients for a quick demo
 ├── models/
@@ -281,11 +285,11 @@ xgboost-bank-marketing/
 │   ├── evaluate_time_windows.py
 │   ├── optimize_threshold.py
 │   ├── predict.py
-│   └── analyze_*.py              # dataset, error and group-error analysis
+│   └── analyze_*.py              # dataset overview, error and group-error analysis
 ├── src/
 │   ├── config.py                 # paths, seed, threshold, hyperparameters
 │   ├── feature_contract.py       # single source of the 11 features
-│   ├── data_loader.py            # CSV loading, target and data checks
+│   ├── data_loader.py            # CSV loading, data checks, chronological split
 │   ├── preprocessor.py
 │   ├── model_trainer.py
 │   ├── model_evaluator.py

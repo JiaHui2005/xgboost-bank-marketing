@@ -1,16 +1,15 @@
-
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
 
 # Virtual environments
 .venv/
 venv/
 env/
 
-# Testing and coverage
+# Testing, linting and coverage
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 .tox/
@@ -28,23 +27,16 @@ htmlcov/
 .idea/
 .vscode/
 
-# Raw datasets
+# Data: raw dataset is downloaded, processed files are script outputs
 data/raw/
-
-# Generated prediction outputs
-data/processed/predictions.csv
-
-# Generated prediction outputs
-data/processed/predictions.csv
-data/processed/model_comparison.csv
-data/processed/time_window_metrics.csv
-data/processed/time_window_summary.csv
+data/processed/
 
 # Python build artifacts
 build/
 dist/
 *.egg-info/
 
-# Local project plan
+# Local planning notes and agent workspace
 /PLAN.md
-/docs
+/docs/
+/.superpowers/

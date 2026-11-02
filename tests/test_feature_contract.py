@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.train_model import load_and_split_data
+from src.data_loader import load_and_split_data
 
 EXPECTED_PRE_CAMPAIGN_FEATURES = [
     "age",
@@ -49,9 +49,7 @@ def test_pre_campaign_features_exclude_current_campaign_fields():
 
 def test_training_split_uses_only_pre_campaign_features(monkeypatch):
     rows = 100
-    data = {
-        feature: np.arange(rows) for feature in EXPECTED_PRE_CAMPAIGN_FEATURES
-    }
+    data = {feature: np.arange(rows) for feature in EXPECTED_PRE_CAMPAIGN_FEATURES}
     data.update(
         {
             "contact": ["cellular"] * rows,
@@ -71,7 +69,7 @@ def test_training_split_uses_only_pre_campaign_features(monkeypatch):
         def load_data(self):
             return df.copy()
 
-    monkeypatch.setattr("scripts.train_model.DataLoader", FakeDataLoader)
+    monkeypatch.setattr("src.data_loader.DataLoader", FakeDataLoader)
 
     X_train, X_val, y_train, y_val = load_and_split_data()
 

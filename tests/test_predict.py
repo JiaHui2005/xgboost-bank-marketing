@@ -1,4 +1,3 @@
-
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -41,7 +40,9 @@ def valid_metadata():
 
 
 def pipeline_with_feature_columns(columns=REQUIRED_COLUMNS):
-    numerical = [column for column in columns if column in predict_module.NUMERICAL_COLUMNS]
+    numerical = [
+        column for column in columns if column in predict_module.NUMERICAL_COLUMNS
+    ]
     categorical = [column for column in columns if column not in numerical]
     return SimpleNamespace(
         named_steps={
@@ -54,11 +55,8 @@ def pipeline_with_feature_columns(columns=REQUIRED_COLUMNS):
 
 
 def create_valid_dataframe():
-    """Create a minimal valid input dataframe"""
-    data = {
-        column: [30]
-        for column in REQUIRED_COLUMNS
-    }
+    """Create a minimal valid input dataframe."""
+    data = {column: [30] for column in REQUIRED_COLUMNS}
 
     data.update(
         {
@@ -119,9 +117,7 @@ def test_prediction_uses_only_pre_campaign_features_and_ignores_excluded_columns
 
     output = pd.read_csv(output_path, sep=";")
     assert output.loc[0, "prediction_label"] == "yes"
-    assert {"contact", "day", "month", "campaign", "duration"}.issubset(
-        output.columns
-    )
+    assert {"contact", "day", "month", "campaign", "duration"}.issubset(output.columns)
 
     # The source CSV may contain this post-campaign field; it is ignored.
     df["campaign"] = [3]
@@ -412,7 +408,9 @@ def test_validate_input_data_rejects_numeric_categorical_values():
     df = create_valid_dataframe()
     df["job"] = [3]
 
-    with pytest.raises(ValueError, match="Column 'job' must contain categorical text values"):
+    with pytest.raises(
+        ValueError, match="Column 'job' must contain categorical text values"
+    ):
         validate_input_data(df)
 
 
@@ -471,7 +469,12 @@ def test_cli_reports_input_errors_without_traceback(tmp_path):
     import sys
 
     result = subprocess.run(
-        [sys.executable, "scripts/predict.py", "--input", str(tmp_path / "missing.csv")],
+        [
+            sys.executable,
+            "scripts/predict.py",
+            "--input",
+            str(tmp_path / "missing.csv"),
+        ],
         cwd=ROOT_DIR,
         capture_output=True,
         text=True,

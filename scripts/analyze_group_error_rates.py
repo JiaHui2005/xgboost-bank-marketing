@@ -1,8 +1,8 @@
-
 import pandas as pd
 
-from scripts.compare_models import build_models, load_and_split_data
+from scripts.compare_models import build_models
 from src.config import PROCESSED_DIR, THRESHOLD
+from src.data_loader import load_and_split_data
 
 OUTPUT_PATH = PROCESSED_DIR / "group_error_rates.csv"
 # Below this many actual positives or negatives, FNR/FPR are too noisy to compare.
@@ -23,23 +23,20 @@ def add_group_error_rates(summary: pd.DataFrame) -> pd.DataFrame:
     summary = summary.copy()
     actual_negative = summary["total"] - summary["actual_positive"]
     summary["actual_negative"] = actual_negative
-    summary["false_positive_rate"] = (
-        summary["false_positive"] / actual_negative.replace(0, pd.NA)
-    )
-    summary["false_positive_fraction_within_group"] = (
-        summary["false_positive"] / summary["total"].replace(0, pd.NA)
-    )
-    summary["false_negative_rate_within_actual_positive"] = (
-        summary["false_negative"]
-        / summary["actual_positive"].replace(0, pd.NA)
-    )
-    summary["missed_positive_share"] = (
-        summary["false_negative"]
-        / summary["actual_positive"].replace(0, pd.NA)
-    )
-    summary["low_support"] = (
-        (summary["actual_positive"] < MIN_CLASS_SUPPORT)
-        | (actual_negative < MIN_CLASS_SUPPORT)
+    summary["false_positive_rate"] = summary[
+        "false_positive"
+    ] / actual_negative.replace(0, pd.NA)
+    summary["false_positive_fraction_within_group"] = summary[
+        "false_positive"
+    ] / summary["total"].replace(0, pd.NA)
+    summary["false_negative_rate_within_actual_positive"] = summary[
+        "false_negative"
+    ] / summary["actual_positive"].replace(0, pd.NA)
+    summary["missed_positive_share"] = summary["false_negative"] / summary[
+        "actual_positive"
+    ].replace(0, pd.NA)
+    summary["low_support"] = (summary["actual_positive"] < MIN_CLASS_SUPPORT) | (
+        actual_negative < MIN_CLASS_SUPPORT
     )
     return summary
 
@@ -60,20 +57,17 @@ def main():
     evaluation["error_type"] = "TN"
 
     evaluation.loc[
-        (evaluation["actual"] == 1)
-        & (evaluation["predicted"] == 1),
+        (evaluation["actual"] == 1) & (evaluation["predicted"] == 1),
         "error_type",
     ] = "TP"
 
     evaluation.loc[
-        (evaluation["actual"] == 0)
-        & (evaluation["predicted"] == 1),
+        (evaluation["actual"] == 0) & (evaluation["predicted"] == 1),
         "error_type",
     ] = "FP"
 
     evaluation.loc[
-        (evaluation["actual"] == 1)
-        & (evaluation["predicted"] == 0),
+        (evaluation["actual"] == 1) & (evaluation["predicted"] == 0),
         "error_type",
     ] = "FN"
 

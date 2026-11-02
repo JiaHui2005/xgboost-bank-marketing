@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,13 +8,21 @@ from src.preprocessor import DataPreprocessor
 
 @pytest.fixture
 def sample_data():
-    X = pd.DataFrame({
-        "job": [
-            "admin", "technician", "services", "admin",
-            "technician", "services", "admin", "technician",
-        ],
-        "age": [25, 35, 45, 30, 40, 50, 28, 38],
-    })
+    X = pd.DataFrame(
+        {
+            "job": [
+                "admin",
+                "technician",
+                "services",
+                "admin",
+                "technician",
+                "services",
+                "admin",
+                "technician",
+            ],
+            "age": [25, 35, 45, 30, 40, 50, 28, 38],
+        }
+    )
 
     y = np.array([0, 1, 0, 1, 0, 1, 0, 1])
 

@@ -1,9 +1,9 @@
-
 import numpy as np
 import pandas as pd
 
-from scripts.compare_models import build_models, load_and_split_data
+from scripts.compare_models import build_models
 from src.config import PROCESSED_DIR, THRESHOLD
+from src.data_loader import load_and_split_data
 
 OUTPUT_DIR = PROCESSED_DIR
 
@@ -98,17 +98,14 @@ def main():
         )
 
     if categorical_rows:
-        categorical_summary = pd.concat(
-            categorical_rows, ignore_index=True
-        )
+        categorical_summary = pd.concat(categorical_rows, ignore_index=True)
         categorical_summary.to_csv(
             OUTPUT_DIR / "categorical_error_summary.csv",
             index=False,
         )
 
     available_numeric = [
-        feature for feature in NUMERIC_FEATURES
-        if feature in errors.columns
+        feature for feature in NUMERIC_FEATURES if feature in errors.columns
     ]
 
     numeric_summary = (

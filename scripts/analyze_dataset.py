@@ -4,13 +4,22 @@ from src.data_loader import DataLoader
 
 
 def main() -> None:
-    loader = DataLoader(DATA_PATH)
-    dataframe = loader.load_data()
+    """Print a descriptive overview of the raw dataset."""
+    analyzer = DataAnalyzer(DataLoader(DATA_PATH).load_data())
 
-    analyzer = DataAnalyzer(dataframe)
+    analyzer.display_overview()
+    for step in (
+        analyzer.check_missing_values,
+        analyzer.check_duplicates,
+        analyzer.analyze_target,
+        analyzer.analyze_unknown_values,
+    ):
+        print()
+        step()
 
-    analyzer.analyze_categorical_column("job")
-    analyzer.analyze_categorical_column("poutcome")
+    for column in ("job", "poutcome"):
+        print()
+        analyzer.analyze_categorical_column(column)
 
 
 if __name__ == "__main__":

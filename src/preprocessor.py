@@ -7,9 +7,11 @@ from sklearn.preprocessing import OneHotEncoder
 
 
 class DataPreprocessor(BaseEstimator, TransformerMixin):
-    """Preprocess categorical and numerical features"""
+    """Preprocess categorical and numerical features."""
 
-    def __init__(self, categorical_columns: list[str], numerical_columns: list[str]) -> None:
+    def __init__(
+        self, categorical_columns: list[str], numerical_columns: list[str]
+    ) -> None:
         self.categorical_columns = categorical_columns
         self.numerical_columns = numerical_columns
 
@@ -33,7 +35,7 @@ class DataPreprocessor(BaseEstimator, TransformerMixin):
                             ),
                         ]
                     ),
-                    self.categorical_columns
+                    self.categorical_columns,
                 ),
                 (
                     "numerical",
@@ -41,8 +43,8 @@ class DataPreprocessor(BaseEstimator, TransformerMixin):
                         strategy="median",
                         keep_empty_features=True,
                     ),
-                    self.numerical_columns
-                )
+                    self.numerical_columns,
+                ),
             ]
         )
 
@@ -54,8 +56,8 @@ class DataPreprocessor(BaseEstimator, TransformerMixin):
         X[self.categorical_columns] = categorical.where(categorical.notna(), np.nan)
         return X
 
-    def fit(self, X, y = None):
-        """Learn preprocessing parameters from training data"""
+    def fit(self, X, y=None):
+        """Learn preprocessing parameters from training data."""
         self.transformer.fit(self._normalize_missing(X), y)
 
         return self

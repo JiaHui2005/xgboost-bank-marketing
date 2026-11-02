@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
@@ -10,9 +9,9 @@ from sklearn.metrics import (
 
 from scripts.compare_models import (
     build_models,
-    load_and_split_data,
 )
 from src.config import PROCESSED_DIR, THRESHOLD
+from src.data_loader import load_and_split_data
 
 OUTPUT_PATH = PROCESSED_DIR / "threshold_comparison.csv"
 CURRENT_THRESHOLD = THRESHOLD
@@ -29,26 +28,14 @@ def evaluate_thresholds(y_true, probabilities, thresholds):
             {
                 "threshold": float(threshold),
                 "accuracy": accuracy_score(y_true, predictions),
-                "precision": precision_score(
-                    y_true, predictions, zero_division=0
-                ),
-                "recall": recall_score(
-                    y_true, predictions, zero_division=0
-                ),
-                "f1": f1_score(
-                    y_true, predictions, zero_division=0
-                ),
+                "precision": precision_score(y_true, predictions, zero_division=0),
+                "recall": recall_score(y_true, predictions, zero_division=0),
+                "f1": f1_score(y_true, predictions, zero_division=0),
                 "predicted_positive": int(predictions.sum()),
                 "contact_rate": float(predictions.sum() / len(y_true)),
-                "true_positive": int(
-                    ((predictions == 1) & (y_true == 1)).sum()
-                ),
-                "false_positive": int(
-                    ((predictions == 1) & (y_true == 0)).sum()
-                ),
-                "false_negative": int(
-                    ((predictions == 0) & (y_true == 1)).sum()
-                ),
+                "true_positive": int(((predictions == 1) & (y_true == 1)).sum()),
+                "false_positive": int(((predictions == 1) & (y_true == 0)).sum()),
+                "false_negative": int(((predictions == 0) & (y_true == 1)).sum()),
             }
         )
 

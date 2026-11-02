@@ -43,11 +43,15 @@ def test_time_windows_are_chronological_and_never_train_on_validation_rows():
         assert model_results["window"].tolist() == [1, 2, 3]
         # Expanding window: train ends exactly where validation starts.
         assert (model_results["train_rows"] == model_results["val_start"]).all()
-        assert (model_results["val_start"].iloc[1:].to_numpy()
-                == model_results["val_end"].iloc[:-1].to_numpy()).all()
+        assert (
+            model_results["val_start"].iloc[1:].to_numpy()
+            == model_results["val_end"].iloc[:-1].to_numpy()
+        ).all()
         assert model_results["val_end"].iloc[-1] == len(X)
-        assert (model_results["support"]
-                == model_results["val_end"] - model_results["val_start"]).all()
+        assert (
+            model_results["support"]
+            == model_results["val_end"] - model_results["val_start"]
+        ).all()
         assert model_results["val_positive_rate"].between(0, 1).all()
 
 
@@ -69,4 +73,6 @@ def test_summary_reports_spread_per_model_and_metric():
     assert row["std"] == pytest.approx(0.2)
     assert row["min"] == pytest.approx(0.2)
     assert row["max"] == pytest.approx(0.6)
-    assert summary.set_index(["model", "metric"]).loc[("XGBoost", "roc_auc"), "std"] == 0
+    assert (
+        summary.set_index(["model", "metric"]).loc[("XGBoost", "roc_auc"), "std"] == 0
+    )

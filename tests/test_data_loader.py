@@ -1,7 +1,13 @@
+import numpy as np
 import pandas as pd
 import pytest
 
-from src.data_loader import check_training_data, encode_binary_target
+from src.data_loader import (
+    check_training_data,
+    encode_binary_target,
+    load_and_split_data,
+)
+from src.feature_contract import PRE_CAMPAIGN_FEATURES
 
 
 def test_encode_binary_target_maps_expected_labels():
@@ -64,3 +70,76 @@ def test_check_training_data_reports_quality_summary():
 def test_check_training_data_rejects_invalid_data(change, message):
     with pytest.raises(ValueError, match=message):
         check_training_data(change(valid_training_frame()))
+
+
+def test_load_and_split_data_uses_ordered_80_20_split(monkeypatch):
+    """Check temporal order, 80/20 sizes, and leakage-feature removal."""
+    rows = 1000
+    df = pd.DataFrame(
+        {
+            "age": np.full(rows, 40),
+            "job": ["admin."] * rows,
+            "marital": ["single"] * rows,
+            "education": ["secondary"] * rows,
+            "default": ["no"] * rows,
+            "balance": np.arange(rows),
+            "housing": ["no"] * rows,
+            "loan": ["no"] * rows,
+            "pdays": np.full(rows, -1),
+            "previous": np.zeros(rows),
+            "poutcome": ["unknown"] * rows,
+            "contact": ["cellular"] * rows,
+            "day": np.arange(rows) % 31 + 1,
+            "month": ["may"] * rows,
+            "campaign": np.arange(rows) % 5 + 1,
+            "duration": np.arange(rows) + 1,
+            "y": ["yes", "no"] * (rows // 2),
+        }
+    )
+
+    class FakeDataLoader:
+        def __init__(self, path):
+            self.path = path
+
+        def load_data(self):
+            return df.copy()
+
+    monkeypatch.setattr(
+        "src.data_loader.DataLoader",
+        FakeDataLoader,
+    )
+
+    result = load_and_split_data()
+    assert len(result) == 4
+    X_train, X_val, y_train, y_val = result
+
+    assert len(X_train) == 800
+    assert len(X_val) == 200
+    assert X_train["balance"].tolist() == list(range(800))
+    assert X_val["balance"].tolist() == list(range(800, 1000))
+
+    assert "duration" not in X_train.columns
+    assert "y" not in X_train.columns
+    assert not {"campaign", "contact", "day", "month"}.intersection(X_train.columns)
+    assert set(y_train.unique()) == {0, 1}
+    assert y_train.tolist() == [1, 0] * 400
+    assert y_val.tolist() == [1, 0] * 100
+
+
+@pytest.mark.parametrize("rows", [0, 1])
+def test_load_and_split_data_rejects_too_few_rows(monkeypatch, rows):
+    data = {feature: np.arange(rows) for feature in PRE_CAMPAIGN_FEATURES}
+    data["y"] = ["no"] * rows
+    df = pd.DataFrame(data)
+
+    class FakeDataLoader:
+        def __init__(self, path):
+            self.path = path
+
+        def load_data(self):
+            return df.copy()
+
+    monkeypatch.setattr("src.data_loader.DataLoader", FakeDataLoader)
+
+    with pytest.raises(ValueError, match="at least two rows"):
+        load_and_split_data()

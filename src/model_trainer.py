@@ -1,4 +1,3 @@
-
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
@@ -7,7 +6,7 @@ from src.preprocessor import DataPreprocessor
 
 
 class ModelTrainer:
-    """Train a model using preprocessing and classification pipeline"""
+    """Train a model using preprocessing and classification pipeline."""
 
     def __init__(
         self,
@@ -19,7 +18,7 @@ class ModelTrainer:
         self.pipeline = None
 
     def build_pipeline(self) -> Pipeline:
-        """Build the preprocessing and XGBoost pipeline"""
+        """Build the preprocessing and XGBoost pipeline."""
         model = XGBClassifier(
             objective="binary:logistic",
             eval_metric="logloss",
@@ -37,7 +36,7 @@ class ModelTrainer:
         return self.pipeline
 
     def fit(self, X_train, y_train):
-        """Train the pipeline"""
+        """Train the pipeline."""
         if self.pipeline is None:
             self.build_pipeline()
 
@@ -45,14 +44,14 @@ class ModelTrainer:
         return self
 
     def predict(self, X):
-        """Predict class labels"""
+        """Predict class labels."""
         if self.pipeline is None:
             raise RuntimeError("Model has not been trained yet")
 
         return self.pipeline.predict(X)
 
     def predict_proba(self, X):
-        """Predict class probabilities"""
+        """Predict class probabilities."""
         if self.pipeline is None:
             raise RuntimeError("Model has not been trained yet")
 

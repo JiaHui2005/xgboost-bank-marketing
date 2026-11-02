@@ -3,57 +3,9 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-import pytest
 
 import scripts.train_model as train_module
 from src.feature_contract import PRE_CAMPAIGN_FEATURES
-
-
-def make_dataset(rows):
-    data = {
-        feature: np.arange(rows) for feature in PRE_CAMPAIGN_FEATURES
-    }
-    data["y"] = (["no", "yes"] * (rows // 2)) + (["no"] if rows % 2 else [])
-    return pd.DataFrame(data)
-
-
-def test_load_and_split_data_uses_ordered_80_20_split(monkeypatch):
-    df = make_dataset(10)
-
-    class FakeDataLoader:
-        def __init__(self, path):
-            self.path = path
-
-        def load_data(self):
-            return df.copy()
-
-    monkeypatch.setattr(train_module, "DataLoader", FakeDataLoader)
-
-    result = train_module.load_and_split_data()
-
-    assert len(result) == 4
-    X_train, X_val, y_train, y_val = result
-    assert X_train["age"].tolist() == list(range(8))
-    assert X_val["age"].tolist() == [8, 9]
-    assert y_train.tolist() == [0, 1] * 4
-    assert y_val.tolist() == [0, 1]
-
-
-@pytest.mark.parametrize("rows", [0, 1])
-def test_load_and_split_data_rejects_too_few_rows(monkeypatch, rows):
-    df = make_dataset(rows)
-
-    class FakeDataLoader:
-        def __init__(self, path):
-            self.path = path
-
-        def load_data(self):
-            return df.copy()
-
-    monkeypatch.setattr(train_module, "DataLoader", FakeDataLoader)
-
-    with pytest.raises(ValueError, match="at least two rows"):
-        train_module.load_and_split_data()
 
 
 def test_training_evaluates_validation_only_and_does_not_score_test(

@@ -1,4 +1,3 @@
-
 import argparse
 import json
 import sys
@@ -42,9 +41,7 @@ def load_artifacts():
             metadata = json.load(file)
 
     except (OSError, json.JSONDecodeError, ValueError) as exc:
-        raise RuntimeError(
-            f"Failed to load model artifacts: {exc}"
-        ) from exc
+        raise RuntimeError(f"Failed to load model artifacts: {exc}") from exc
 
     if not isinstance(metadata, dict):
         raise ValueError("Metadata must be a JSON object.")
@@ -60,9 +57,7 @@ def load_artifacts():
         or not np.isfinite(threshold)
         or not 0 <= threshold <= 1
     ):
-        raise ValueError(
-            "Metadata threshold must be a finite number between 0 and 1."
-        )
+        raise ValueError("Metadata threshold must be a finite number between 0 and 1.")
 
     required_metadata = {
         "artifact_version",
@@ -114,9 +109,8 @@ def load_artifacts():
 
     try:
         preprocessor = pipeline.named_steps["preprocessor"]
-        model_features = (
-            list(preprocessor.categorical_columns)
-            + list(preprocessor.numerical_columns)
+        model_features = list(preprocessor.categorical_columns) + list(
+            preprocessor.numerical_columns
         )
     except (AttributeError, KeyError, TypeError):
         model_features = []
@@ -142,14 +136,10 @@ def validate_input_data(df: pd.DataFrame) -> None:
     if not df.columns.is_unique:
         raise ValueError("Input CSV contains duplicate column names.")
 
-    missing_columns = sorted(
-        set(REQUIRED_COLUMNS) - set(df.columns)
-    )
+    missing_columns = sorted(set(REQUIRED_COLUMNS) - set(df.columns))
 
     if missing_columns:
-        raise ValueError(
-            f"Input CSV is missing required columns: {missing_columns}"
-        )
+        raise ValueError(f"Input CSV is missing required columns: {missing_columns}")
 
     # Missing feature values are imputed by the fitted model pipeline.
     feature_df = df[REQUIRED_COLUMNS]
@@ -157,9 +147,7 @@ def validate_input_data(df: pd.DataFrame) -> None:
     # Validate numerical features while allowing NaN for pipeline imputation.
     for column in NUMERICAL_COLUMNS:
         if pd.api.types.is_bool_dtype(feature_df[column]):
-            raise ValueError(
-                f"Column '{column}' must contain numerical values."
-            )
+            raise ValueError(f"Column '{column}' must contain numerical values.")
         try:
             numeric_values = pd.to_numeric(
                 feature_df[column],
@@ -172,15 +160,11 @@ def validate_input_data(df: pd.DataFrame) -> None:
 
         numeric_array = numeric_values.to_numpy(dtype=float, na_value=np.nan)
         if np.isinf(numeric_array).any():
-            raise ValueError(
-                f"Column '{column}' contains infinite values."
-            )
+            raise ValueError(f"Column '{column}' contains infinite values.")
 
     # Validate categorical features.
     categorical_columns = [
-        column
-        for column in REQUIRED_COLUMNS
-        if column not in NUMERICAL_COLUMNS
+        column for column in REQUIRED_COLUMNS if column not in NUMERICAL_COLUMNS
     ]
 
     for column in categorical_columns:
@@ -191,9 +175,7 @@ def validate_input_data(df: pd.DataFrame) -> None:
             or isinstance(feature_df[column].dtype, pd.CategoricalDtype)
             or pd.api.types.is_string_dtype(feature_df[column])
         ):
-            raise ValueError(
-                f"Column '{column}' must contain categorical text values."
-            )
+            raise ValueError(f"Column '{column}' must contain categorical text values.")
 
 
 def parse_args(argv=None):
@@ -248,9 +230,7 @@ def main(argv=None):
             f"Input CSV is empty or contains no header: {input_path}"
         ) from exc
     except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
-        raise ValueError(
-            f"Unable to read input CSV '{input_path}': {exc}"
-        ) from exc
+        raise ValueError(f"Unable to read input CSV '{input_path}': {exc}") from exc
 
     validate_input_data(df)
 
@@ -297,15 +277,11 @@ def main(argv=None):
     try:
         results.to_csv(output_path, sep=";", index=False)
     except OSError as exc:
-        raise OSError(
-            f"Failed to save predictions to '{output_path}': {exc}"
-        ) from exc
+        raise OSError(f"Failed to save predictions to '{output_path}': {exc}") from exc
 
     print("\nPrediction results:")
     print(
-        results[
-            ["subscription_probability", "prediction_label"]
-        ].to_string(index=False)
+        results[["subscription_probability", "prediction_label"]].to_string(index=False)
     )
     print(f"\nResults saved to: {output_path}")
 

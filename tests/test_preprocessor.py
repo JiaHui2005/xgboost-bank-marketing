@@ -5,10 +5,12 @@ from src.preprocessor import DataPreprocessor
 
 
 def test_preprocessor_transforms_categorical_and_numerical_data():
-    X_train = pd.DataFrame({
-        "job": ["admin", "technician", "admin"],
-        "age": [30, 40, 50],
-    })
+    X_train = pd.DataFrame(
+        {
+            "job": ["admin", "technician", "admin"],
+            "age": [30, 40, 50],
+        }
+    )
 
     preprocessor = DataPreprocessor(
         categorical_columns=["job"],
@@ -21,15 +23,19 @@ def test_preprocessor_transforms_categorical_and_numerical_data():
 
 
 def test_preprocessor_handles_unknown_categories():
-    X_train = pd.DataFrame({
-        "job": ["admin", "technician"],
-        "age": [30, 40],
-    })
+    X_train = pd.DataFrame(
+        {
+            "job": ["admin", "technician"],
+            "age": [30, 40],
+        }
+    )
 
-    X_test = pd.DataFrame({
-        "job": ["student"],
-        "age": [25],
-    })
+    X_test = pd.DataFrame(
+        {
+            "job": ["student"],
+            "age": [25],
+        }
+    )
 
     preprocessor = DataPreprocessor(
         categorical_columns=["job"],
@@ -100,5 +106,7 @@ def test_preprocessor_fits_when_a_column_is_entirely_missing_in_train():
     # Only `__missing__` was seen, so `admin` encodes to zeros; all-missing numeric imputes 0.
     assert values.tolist() == [[0.0, 0.0]]
     missing_row = preprocessor.transform(pd.DataFrame({"job": [None], "age": [np.nan]}))
-    missing_row = missing_row.toarray() if hasattr(missing_row, "toarray") else missing_row
+    missing_row = (
+        missing_row.toarray() if hasattr(missing_row, "toarray") else missing_row
+    )
     assert missing_row.tolist() == [[1.0, 0.0]]
