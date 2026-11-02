@@ -1,0 +1,6 @@
+customer_id;age;job;marital;education;default;balance;housing;loan;pdays;previous;poutcome
+C001;35;technician;single;secondary;no;1200;yes;no;-1;0;unknown
+C002;62;retired;married;tertiary;no;8500;no;no;92;3;success
+C003;28;student;single;tertiary;no;300;no;no;-1;0;unknown
+C004;47;blue-collar;married;primary;no;-150;yes;yes;180;1;failure
+C005;41;management;divorced;;no;;yes;no;-1;0;unknown

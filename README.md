@@ -1,719 +1,278 @@
 # XGBoost Bank Marketing
 
+Predicts, **before a marketing campaign starts**, which bank clients are most likely to subscribe to a term deposit, using the UCI Bank Marketing dataset. The focus is on doing the ML engineering honestly: a feature contract that matches the prediction point, chronological validation with no test-set reuse, a versioned model artifact checked at inference time, and tests that run in CI.
 
+**Key findings**
 
-A machine learning project that predicts whether a bank customer will subscribe to a term deposit based on marketing campaign data. The project implements an end-to-end pipeline using XGBoost, scikit-learn preprocessing, threshold-based classification, model persistence, batch inference, and automated testing.
-
-
+- Once features that are only known during or after the call (`duration`, `campaign`, `contact`, `day`, `month`) are removed, the remaining signal is weak: ROC-AUC is about 0.69 on the 80/20 validation split and 0.53–0.66 across five time windows.
+- Results depend heavily on the period evaluated, because the subscription rate rises from about 5% to 36% across the dataset.
+- XGBoost does **not** beat a Logistic Regression baseline on these features. Both are kept so the comparison stays visible.
+- This is a predictive model, not a causal one, and no independent holdout exists yet. See [Limitations](#limitations-and-future-improvements).
 
 ## Table of Contents
 
-
-
-- [Project Overview](#project-overview)
-
+- [Problem Definition](#problem-definition)
 - [Dataset](#dataset)
-
-- [Technology Stack](#technology-stack)
-
-- [Project Structure](#project-structure)
-
-- [Installation](#installation)
-
-- [Machine Learning Pipeline](#machine-learning-pipeline)
-
-- [Model Performance](#model-performance)
-- [Baseline Comparison](#baseline-comparison)
-- [Stability Across Time Windows](#stability-across-time-windows)
-
-- [Training](#training)
-
+- [Pipeline](#pipeline)
+- [Evaluation Strategy](#evaluation-strategy)
+- [Results](#results)
+- [Quick Start](#quick-start)
+- [Training and Experiments](#training-and-experiments)
 - [Batch Prediction](#batch-prediction)
-
-- [Testing](#testing)
-
-- [Model Artifacts](#model-artifacts)
-
+- [Testing and CI](#testing-and-ci)
+- [Project Structure](#project-structure)
 - [Limitations and Future Improvements](#limitations-and-future-improvements)
-
 - [License](#license)
 
+## Problem Definition
 
+| | |
+| --- | --- |
+| **Task** | Binary classification: will the client subscribe to a term deposit (`y = yes`)? |
+| **Prediction point** | Before the current marketing campaign begins, when the bank decides whom to contact. |
+| **Use** | Rank clients so a limited contact capacity is spent on the most likely subscribers. |
+| **Output** | A subscription probability per client, plus a `yes`/`no` label at a fixed threshold of `0.20`. |
+| **Out of scope** | Estimating the causal effect of a call, or choosing a business-optimal threshold (FP/FN costs and contact capacity have not been provided). |
 
-## Project Overview
-
-
-
-The goal is to develop a reproducible machine learning pipeline that predicts customer subscription behavior for bank marketing campaigns.
-
-
-
-The project covers:
-
-
-
-- Dataset loading and validation.
-
-- Exploratory data analysis.
-
-- Numerical and categorical feature preprocessing.
-
-- XGBoost model training.
-
-- Model evaluation using classification metrics.
-
-- Classification threshold configuration.
-
-- Model serialization and metadata management.
-
-- Batch prediction through a command-line interface.
-
-- Automated testing with pytest.
-
-
-
-A scikit-learn pipeline combines preprocessing and model inference so that the same transformations are applied during training and prediction.
-
-
+Because the decision is made before any contact, only information available at that moment may be used as features. This rule drives the feature contract below.
 
 ## Dataset
 
+[Bank Marketing](https://archive.ics.uci.edu/dataset/222/bank+marketing) from the UCI Machine Learning Repository: `bank-full.csv`, 45,211 rows, 17 columns, semicolon-delimited, target `y` (`yes`/`no`). UCI documents the rows as ordered by date (May 2008 to November 2010).
 
+The raw dataset is not committed. Download it and place it at `data/raw/bank-full.csv` before training or running experiments. Unit tests and batch prediction do not need it.
 
-This project uses the **Bank Marketing dataset** from the UCI Machine Learning Repository.
+### Feature Contract
 
+The model uses 11 pre-campaign features, defined once in `src/feature_contract.py`. The UCI dictionary describes fields but does not prove when a production system exposes them; operations confirmed on 2026-10-29 that `pdays`, `previous`, and `poutcome` are available before the current campaign. Profile-field freshness still needs confirmation before deployment.
 
-
-| Property | Description |
-| --- | --- |
-| Dataset file | `bank-full.csv` |
-| Number of records | 45,211 |
-| Number of original columns | 17 |
-| Target variable | `y` |
-| Target values | `yes`, `no` |
-| Input delimiter | Semicolon (`;`) |
-
-
-
-
-The dataset contains customer demographic information, financial information, and details about marketing campaigns. The target variable indicates whether a customer subscribed to a term deposit.
-
-
-
-### Data Leakage Prevention
-
-
-
-The prediction point is before the current marketing campaign begins. The table distinguishes what the UCI dictionary says from operational availability: the dictionary describes fields, but does not prove when a production system snapshots or exposes them. Operational confirmation provided on 2026-10-29 states that `pdays`, `previous`, and `poutcome` are available before the current campaign; confirm profile-field freshness and availability in the operational source before deployment.
-
-| Feature | UCI meaning / source | Available at pre-campaign prediction? | Missing / special values | Decision |
+| Feature | UCI meaning | Available before the campaign? | Missing / special values | Decision |
 | --- | --- | --- | --- | --- |
-| `age` | Client age | Assumed available; confirm source freshness | No missing attributes reported by UCI; numeric nulls use the training median | Keep |
-| `job` | Client job type | Assumed available; confirm source freshness | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
-| `marital` | Marital status (`divorced` includes divorced or widowed) | Assumed available; confirm source freshness | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
-| `education` | Education level | Assumed available; confirm source freshness | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
-| `default` | Whether the client has credit in default | Assumed available; confirm source freshness | Nulls use `__missing__`; `yes`/`no` are values | Keep |
-| `balance` | Average yearly balance, in euros | Assumed available; confirm source freshness | Numeric nulls use the training median | Keep |
-| `housing` | Whether the client has a housing loan | Assumed available; confirm source freshness | Nulls use `__missing__`; `yes`/`no` are values | Keep |
-| `loan` | Whether the client has a personal loan | Assumed available; confirm source freshness | Nulls use `__missing__`; `yes`/`no` are values | Keep |
-| `pdays` | Days since the client was last contacted in a previous campaign; `-1` means not previously contacted | UCI defines prior-campaign history; operationally confirmed available before the current campaign (2026-10-29) | `-1` is a meaningful sentinel, not missing; other numeric nulls use the training median | Keep |
-| `previous` | Number of contacts before this campaign for this client | UCI defines prior-campaign history; operationally confirmed available before the current campaign (2026-10-29) | `0` means no prior contacts; numeric nulls use the training median | Keep |
-| `poutcome` | Outcome of the previous marketing campaign | UCI defines prior-campaign history; operationally confirmed available before the current campaign (2026-10-29) | Literal `unknown` retained as a category; nulls use `__missing__` | Keep |
+| `age` | Client age | Assumed; confirm source freshness | Numeric nulls use the training median | Keep |
+| `job` | Job type | Assumed; confirm source freshness | `unknown` kept as a category; nulls use `__missing__` | Keep |
+| `marital` | Marital status (`divorced` includes widowed) | Assumed; confirm source freshness | `unknown` kept as a category; nulls use `__missing__` | Keep |
+| `education` | Education level | Assumed; confirm source freshness | `unknown` kept as a category; nulls use `__missing__` | Keep |
+| `default` | Has credit in default | Assumed; confirm source freshness | Nulls use `__missing__` | Keep |
+| `balance` | Average yearly balance (EUR) | Assumed; confirm source freshness | Numeric nulls use the training median | Keep |
+| `housing` | Has a housing loan | Assumed; confirm source freshness | Nulls use `__missing__` | Keep |
+| `loan` | Has a personal loan | Assumed; confirm source freshness | Nulls use `__missing__` | Keep |
+| `pdays` | Days since last contact in a previous campaign | Yes, confirmed 2026-10-29 | `-1` = never contacted (a value, not missing) | Keep |
+| `previous` | Contacts before this campaign | Yes, confirmed 2026-10-29 | `0` = no prior contacts | Keep |
+| `poutcome` | Outcome of the previous campaign | Yes, confirmed 2026-10-29 | `unknown` kept as a category | Keep |
+| `duration` | Last call duration | No, known only after the call | | **Drop** |
+| `campaign` | Contacts during this campaign | No, counts current-campaign contacts | | **Drop** |
+| `contact`, `day`, `month` | Channel and date of the current contact | No, attributes of the current contact | | **Drop** |
 
-The UCI dictionary reports no missing attribute values. `unknown`, `-1`, and `0` are documented field values, not missing values. The preprocessing policy above describes handling for nulls if they occur in other input data.
+`duration` is the classic leakage trap in this dataset: it is highly predictive but unknown until the call has ended.
 
-**No prior contact vs. missing data.** These are treated as different states on purpose:
+### No Prior Contact vs. Missing Data
 
-- *No prior contact* is a real, known fact about the client. It is encoded by the values themselves: `pdays = -1` and `previous = 0`, which always occur together in `bank-full.csv` (36,954 of 45,211 rows, 81.7%), and all of these rows have `poutcome = unknown`. The model receives these values unchanged, so XGBoost can learn a separate split for `pdays = -1` without an extra indicator column.
+These are treated as different states on purpose:
+
+- **No prior contact** is a known fact, encoded by the values themselves: `pdays = -1` and `previous = 0`. They always occur together in `bank-full.csv` (36,954 of 45,211 rows, 81.7%), and all of these rows have `poutcome = unknown`. The model receives these values unchanged; tree models can split on `pdays = -1` without an extra indicator column.
 - `poutcome = unknown` alone does not prove the client was never contacted: 5 rows have prior contacts but an `unknown` outcome. Use `pdays`/`previous` to identify clients with no history.
-- *Missing data* (`NaN`, `None`, `pd.NA`, a blank CSV field) means the value was not supplied. It is imputed (median for numeric, `__missing__` for categorical) and is never interpreted as "no prior contact". Upstream systems should send `-1`/`0`/`unknown` for clients with no history rather than leaving the fields blank.
+- **Missing data** (`NaN`, `None`, `pd.NA`, a blank CSV field) means the value was not supplied. It is imputed (median for numeric, `__missing__` for categorical) and never interpreted as "no prior contact". Upstream systems should send `-1`/`0`/`unknown` for clients with no history rather than leaving fields blank.
 
-The model excludes `duration` (known only after a call), `campaign` (counts contacts in the current campaign), and `contact`, `day`, and `month` (attributes of the current contact). These are not available at the stated prediction point.
+The UCI data itself contains no missing values; the imputation policy covers new input data.
 
+## Pipeline
 
-
-### Dataset Setup
-
-
-
-Place the dataset at the following path:
-
-
-
-```text
-
-data/raw/bank-full.csv
-
+```mermaid
+flowchart LR
+    A["Raw CSV<br/>bank-full.csv"] --> B["Validate target<br/>only yes / no"]
+    B --> C["Select 11<br/>pre-campaign features"]
+    C --> D["Chronological split<br/>first 80% / last 20%"]
+    D --> E["Preprocess<br/>impute + one-hot"]
+    E --> F["XGBoost<br/>classifier"]
+    F --> G["Probability"]
+    G --> H{"≥ 0.20?"}
+    H -->|yes| I["Predict: yes"]
+    H -->|no| J["Predict: no"]
+    F --> K["Save pipeline<br/>+ versioned metadata"]
+    K --> L["Batch prediction<br/>checks contract, validates input"]
 ```
 
+- Preprocessing and the classifier are one scikit-learn `Pipeline`, so training and inference apply identical transformations, and imputation statistics are fitted on training rows only.
+- Numeric features: median imputation. Categorical features: a `__missing__` category, then one-hot encoding that ignores categories unseen during training.
+- XGBoost settings: `n_estimators=300`, `learning_rate=0.05`, `max_depth=4`, `min_child_weight=5`, `subsample=0.8`, `colsample_bytree=0.8`, `random_state=42`.
+- `models/metadata.json` records the feature list, dropped features, threshold, target mapping, seed, split, Python and dependency versions, training time, and validation metrics. Batch prediction refuses an artifact whose metadata or pipeline columns do not match the current feature contract.
 
+## Evaluation Strategy
 
-The original CSV file uses a semicolon (`;`) as its delimiter.
+**Split.** Rows keep their UCI (date) order with no shuffling or stratification: the first 80% train, the last 20% validate. This mimics training on the past and predicting a later period.
 
+**No test-set reuse.** An earlier version of this project compared models on a test set, which exposed that set to model selection. Those numbers are withdrawn. Validation is used for development only. An independent estimate requires new campaign data, evaluated once after the model and threshold are locked. No holdout is carved out of `bank-full.csv`.
 
+**Metrics.** The target is imbalanced and the use case is ranking, so:
 
-The raw dataset is excluded from version control. Download the dataset from the [UCI Machine Learning Repository](https\://archive.ics.uci.edu/dataset/222/bank+marketing) and place the file at the expected path before running training or other scripts that require the full dataset.
+- **Average Precision (AP)** is the primary ranking metric. A random model's AP equals the positive rate, so always read AP next to it.
+- **ROC-AUC** is secondary.
+- At the fixed `0.20` threshold the scripts also report precision, recall, F1, FPR (`FP / (FP + TN)`), FNR (`FN / (FN + TP)`), confusion counts, and class support. These describe trade-offs; `0.20` is not claimed to be optimal.
+- Accuracy alone is not used.
 
+**Stability.** A single split gives one point estimate, so both models are also retrained on 5 expanding time windows (`TimeSeriesSplit`).
 
+## Results
 
-## Technology Stack
+All numbers are development validation, not an independent holdout.
 
+### Chronological 80/20 Split
 
+Validation: 9,043 rows, 2,856 positives (31.6%).
 
-- **Python 3.12+** — primary programming language, subject to the version constraints in `pyproject.toml`.
+| Model | AP | ROC-AUC | Precision @0.20 | Recall @0.20 | F1 @0.20 | FPR @0.20 |
+| --- | --- | --- | --- | --- | --- | --- |
+| XGBoost | 0.484 | 0.694 | 0.506 | 0.388 | 0.439 | 0.174 |
+| Logistic Regression | **0.548** | **0.718** | 0.685 | 0.315 | 0.431 | 0.067 |
 
-- **XGBoost** — gradient boosting classifier.
+### Stability Across Time Windows
 
-- **pandas and NumPy** — data manipulation and numerical computation.
+Each window trains on all earlier rows and validates on the next 7,535 rows. Hyperparameters and the `0.20` threshold are not tuned per window.
 
-- **scikit-learn** — preprocessing, data splitting, pipelines, and evaluation.
-
-- **joblib** — model serialization.
-
-- **pytest** — automated testing.
-
-- **uv** — dependency and environment management.
-
-
-
-## Project Structure
-
-
-
-```text
-
-xgboost-bank-marketing/
-
-├── data/
-
-│   ├── raw/                  # Local datasets; excluded from Git
-
-│   └── processed/            # Processed data and prediction outputs
-
-├── models/
-
-│   ├── xgboost_pipeline.joblib
-
-│   └── metadata.json
-
-├── scripts/
-
-│   ├── analyze_dataset.py
-
-│   ├── predict.py
-
-│   └── train_model.py
-
-├── src/
-
-│   ├── data_analyzer.py
-
-│   ├── data_loader.py
-
-│   ├── model_evaluator.py
-
-│   ├── model_trainer.py
-
-│   └── preprocessor.py
-
-├── tests/
-
-│   ├── test_model_evaluator.py
-
-│   ├── test_model_trainer.py
-
-│   ├── test_predict.py
-
-│   ├── test_preprocessor.py
-
-│   └── test_saved_model.py
-
-├── pyproject.toml
-
-├── uv.lock
-
-└── README.md
-
-```
-
-
-
-The project separates data handling, preprocessing, model training, evaluation, inference, and testing into dedicated modules.
-
-
-
-## Installation
-
-
-
-### Prerequisites
-
-
-
-- Python version supported by `pyproject.toml`.
-
-- [uv](https\://docs.astral.sh/uv/).
-
-
-
-### Install Dependencies
-
-
-
-Clone the repository and navigate to the project directory:
-
-
-
-```bash
-
-git clone https\://github.com/JiaHui2005/xgboost-bank-marketing.git
-
-cd xgboost-bank-marketing
-
-```
-
-
-
-Install the project dependencies:
-
-
-
-```bash
-
-uv sync
-
-```
-
-
-
-Before training, ensure that `data/raw/bank-full.csv` is available at the expected location.
-
-
-
-## Machine Learning Pipeline
-
-
-
-The training workflow follows these steps:
-
-
-
-```text
-
-Raw Dataset
-
-    |
-
-    v
-
-Data Loading and Validation
-
-    |
-
-    v
-
-Remove Leakage-Prone Feature
-
-    |
-
-    v
-
-Chronological Train / Validation Split (80/20)
-
-    |
-
-    v
-
-Feature Preprocessing
-
-    |
-
-    v
-
-XGBoost Training
-
-    |
-
-    v
-
-Validation Evaluation
-
-    |
-
-    v
-
-Save Model Pipeline and Metadata
-
-    |
-
-    v
-
-```
-
-
-
-### Data Splitting
-
-
-
-The dataset is split by its original UCI row order, without shuffling or stratification:
-
-
-
-| Subset | Percentage |
-| --- | --- |
-| Training (first rows) | 80% |
-| Validation (last rows) | 20% |
-
-
-
-
-The source describes the rows as ordered by date. Validation is used for model development and selection, not as an independent final test estimate. No independent evaluation is currently available; that requires new campaign data not used for model or threshold selection.
-
-
-
-### Model Configuration
-
-
-
-The current XGBoost configuration includes:
-
-
-
-| Parameter | Value |
-| --- | --- |
-| `n_estimators` | 300 |
-| `learning_rate` | 0.05 |
-| `max_depth` | 4 |
-| `min_child_weight` | 5 |
-| `subsample` | 0.8 |
-| `colsample_bytree` | 0.8 |
-
-
-
-
-The preprocessing pipeline imputes numerical missing values with the training-split median and categorical missing values with a dedicated `__missing__` category before encoding. Imputation is fitted within each model pipeline, so validation rows do not influence the imputation statistics. Unknown categorical values remain supported by one-hot encoding. Target labels are validated as exactly `no` or `yes` before mapping to `0`/`1`.
-
-
-
-## Model Performance
-
-The training and comparison scripts preserve the UCI row order and use the first 80% of rows for training and the final 20% for validation. The dataset is documented as ordered by date; this split supports development on a later period, but it is validation—not an independent test or unbiased final estimate. The classification threshold currently used by the training workflow is `0.20`.
-
-The README previously reported test-set metrics for multiple candidate models and used them to support a model comparison. That exposed the test results to model selection; those historical numbers are therefore withdrawn as an unbiased final estimate. No independent evaluation is currently available from this dataset. A final independent evaluation requires new campaign data that has not been used for model, hyperparameter, or threshold selection, evaluated after those choices are locked.
-
-The campaign's contact capacity and the costs/value of false positives and false negatives have not been provided, so the operating threshold is not optimized or claimed to be business-optimal. Until those inputs are available, use validation Average Precision (AP) as a provisional model-ranking metric. At the existing fixed threshold of `0.20`, also report precision, recall, F1, FPR (`FP / (FP + TN)`), FNR (`FN / (FN + TP)`), confusion counts, and class support. These threshold-specific values describe tradeoffs; they do not determine the business-optimal threshold. ROC-AUC is a secondary ranking metric, and accuracy alone is insufficient for the imbalanced target.
-
-
-
-## Baseline Comparison
-
-XGBoost and Logistic Regression are compared on the same chronological 80/20 training/validation split, using the same target and fixed threshold. Categorical features are one-hot encoded; Logistic Regression additionally scales numerical features. Candidate ranking must be based on validation metrics only. No test metrics are produced by the comparison script.
-
-### Reproduce the Comparison
-
-Run the following command from the project root:
-
-```bash
-uv run python scripts/compare_models.py
-```
-
-The script trains both models, reports validation metrics only, and saves them to `data/processed/model_comparison.csv`. It does not create or score a test split.
-
-The threshold is held fixed at `0.20` for this comparison. It should not be described as optimized unless a separate validation-based threshold-selection experiment has been performed.
-
-## Stability Across Time Windows
-
-A single 80/20 split gives one point estimate. To see how much results depend on the period evaluated, both models are retrained on an expanding window (`TimeSeriesSplit`, 5 windows): each window trains on all earlier rows and validates on the next 7,535 rows, preserving the UCI row order. Hyperparameters and the `0.20` threshold are the same as above and were not tuned per window.
-
-```bash
-uv run python scripts/evaluate_time_windows.py
-```
-
-Per-window metrics are saved to `data/processed/time_window_metrics.csv` and the summary to `data/processed/time_window_summary.csv`.
-
-| Window | Train rows | Validation rows | Positive rate | XGBoost AP | LogReg AP | XGBoost ROC-AUC | LogReg ROC-AUC | XGBoost recall @0.20 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 7,536 | 7,535 | 5.2% | 0.060 | 0.067 | 0.534 | 0.567 | 0.003 |
-| 2 | 15,071 | 7,535 | 6.2% | 0.069 | 0.079 | 0.528 | 0.553 | 0.000 |
-| 3 | 22,606 | 7,535 | 5.9% | 0.072 | 0.057 | 0.555 | 0.505 | 0.002 |
-| 4 | 30,141 | 7,535 | 13.6% | 0.232 | 0.250 | 0.658 | 0.663 | 0.008 |
-| 5 | 37,676 | 7,535 | 36.3% | 0.501 | 0.564 | 0.659 | 0.688 | 0.407 |
-| **Mean ± std** | | | | **0.187 ± 0.190** | **0.203 ± 0.217** | **0.587 ± 0.067** | **0.595 ± 0.077** | **0.084 ± 0.181** |
+| Window | Train rows | Positive rate | XGBoost AP | LogReg AP | XGBoost ROC-AUC | LogReg ROC-AUC | XGBoost recall @0.20 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 7,536 | 5.2% | 0.060 | 0.067 | 0.534 | 0.567 | 0.003 |
+| 2 | 15,071 | 6.2% | 0.069 | 0.079 | 0.528 | 0.553 | 0.000 |
+| 3 | 22,606 | 5.9% | 0.072 | 0.057 | 0.555 | 0.505 | 0.002 |
+| 4 | 30,141 | 13.6% | 0.232 | 0.250 | 0.658 | 0.663 | 0.008 |
+| 5 | 37,676 | 36.3% | 0.501 | 0.564 | 0.659 | 0.688 | 0.407 |
+| **Mean ± std** | | | **0.187 ± 0.190** | **0.203 ± 0.217** | **0.587 ± 0.067** | **0.595 ± 0.077** | **0.084 ± 0.181** |
 
 What this shows:
 
-- **Results are period-dependent.** The positive rate rises from about 5% to 36% across the dataset, and AP largely tracks that base rate. Compare AP with each window's positive rate (a random model scores AP ≈ positive rate), not across windows.
-- **Ranking ability is weak with pre-campaign features.** ROC-AUC is 0.53–0.56 in the first three windows and about 0.66 in the last two. Removing current-contact features (`duration`, `campaign`, `contact`, `day`, `month`) removes most of the signal.
-- **The fixed `0.20` threshold does not transfer across periods.** Models trained on low-base-rate periods rarely exceed `0.20`, so recall is near zero in windows 1–4.
-- **XGBoost does not consistently beat the Logistic Regression baseline.** Logistic Regression has equal or higher mean AP and ROC-AUC; differences are within the spread across windows.
+- **Results are period-dependent.** AP largely tracks each window's positive rate, so compare AP with that rate, not across windows.
+- **Ranking ability is weak with pre-campaign features.** ROC-AUC is 0.53–0.56 in the first three windows.
+- **The fixed `0.20` threshold does not transfer across periods.** Models trained on low-base-rate periods rarely exceed it, so recall is near zero in windows 1–4.
+- **XGBoost does not consistently beat Logistic Regression.** The baseline has equal or higher mean AP and ROC-AUC, and differences are within the spread across windows.
 
-The single 80/20 validation result should therefore be read as one period's estimate, not a stable performance level. These are still development-validation numbers, not an independent holdout.
+The 80/20 result is therefore one period's estimate, not a stable performance level. The checked-in artifact is still the XGBoost pipeline; switching models, calibrating probabilities, or choosing a threshold should wait for business inputs (contact capacity, FP/FN costs) and an independent holdout.
 
-## Training
+## Quick Start
 
-
-
-To train the model, evaluate it, and save the trained pipeline and metadata, run the following command from the project root:
-
-
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-
-uv run python scripts/train_model.py
-
+git clone https://github.com/JiaHui2005/xgboost-bank-marketing.git
 ```
 
+```bash
+cd xgboost-bank-marketing
+```
 
+```bash
+uv sync
+```
 
-The script:
+Score the bundled sample of 5 synthetic clients with the checked-in model (no dataset download needed):
 
+```bash
+uv run python scripts/predict.py --input examples/sample_customers.csv
+```
 
-
-1\. Loads and splits the dataset.
-
-2\. Uses the pre-campaign feature contract, excluding `duration`, `campaign`, `contact`, `day`, and `month`.
-
-3\. Fits the preprocessing and XGBoost pipeline.
-
-4\. Evaluates the model on the validation set.
-
-5\. Saves the trained pipeline and metadata.
-
-
-
-
-The training process generates or updates:
-
-
+Expected output (probabilities may differ slightly across platforms):
 
 ```text
-
-models/
-
-├── xgboost_pipeline.joblib
-
-└── metadata.json
-
+ subscription_probability prediction_label
+                 0.076445               no
+                 0.784054              yes
+                 0.189532               no
+                 0.017961               no
+                 0.073595               no
 ```
 
+Client `C002` has a previous successful campaign (`poutcome = success`) and scores highest. `C005` has blank `education` and `balance`, which the pipeline imputes.
 
+## Training and Experiments
 
-The script prints validation metrics and the validation confusion matrix only. Validation results are for development, not an independent final estimate; independent evaluation remains pending new campaign data.
+These commands need `data/raw/bank-full.csv` and must be run from the project root.
 
+| Command | What it does | Output |
+| --- | --- | --- |
+| `uv run python scripts/train_model.py` | Trains XGBoost on the 80/20 split, prints validation metrics, saves the artifact | `models/xgboost_pipeline.joblib`, `models/metadata.json` |
+| `uv run python scripts/compare_models.py` | XGBoost vs. Logistic Regression on the 80/20 split | `data/processed/model_comparison.csv` |
+| `uv run python scripts/evaluate_time_windows.py` | Both models across 5 expanding time windows | `data/processed/time_window_metrics.csv`, `data/processed/time_window_summary.csv` |
+| `uv run python scripts/optimize_threshold.py` | Threshold trade-off table on validation (descriptive; does not change the threshold) | `data/processed/threshold_comparison.csv` |
 
+`train_model.py` overwrites the checked-in model artifact. Retrain after changing the feature contract or training settings, since batch prediction rejects a mismatched artifact.
 
 ## Batch Prediction
 
-
-
-The project provides a command-line interface for generating predictions from a CSV file.
-
-
-
-### Input Requirements
-
-
-
-The input CSV must use a semicolon (`;`) delimiter and include the following 11 pre-campaign model features:
-
-
-
-```text
-
-age, job, marital, education, default,
-
-balance, housing, loan,
-
-pdays, previous, poutcome
-
-```
-
-
-
-`duration`, `campaign`, `contact`, `day`, and `month` are excluded and are not required. Additional columns may be present in the input file, but the prediction pipeline ignores them. Operations confirmed that `pdays`, `previous`, and `poutcome` are available before the current campaign starts; profile-field availability still requires confirmation.
-
-Missing feature values are accepted and imputed by the fitted pipeline using statistics/categories learned during training. Infinite numeric values, non-numeric values in numeric columns, and non-text values in categorical columns are rejected.
-
-The checked-in model artifact uses the versioned pre-campaign feature contract. The prediction command checks that metadata and the saved pipeline match this contract before inference; retrain the model after changing its feature contract or training settings.
-
-
-
-### Run Predictions
-
-
-
-From the project root, run:
-
-
-
 ```bash
-
-uv run python scripts/predict.py --input data/raw/bank-full.csv
-
+uv run python scripts/predict.py --input path/to/clients.csv
 ```
 
+**Input.** A semicolon-delimited CSV containing the 11 contract features. Other columns (for example a client ID) are allowed and copied to the output; `duration`, `campaign`, `contact`, `day`, and `month` are not required. Missing values are accepted and imputed. The command rejects an empty file, missing or duplicate columns, infinite or non-numeric values (including `True`/`False`) in numeric columns, and non-text values in categorical columns.
 
-
-The script loads the saved model and metadata, calculates subscription probabilities, and generates binary predictions.
-
-
-
-### Output
-
-
-
-The output is saved to:
-
-
-
-```text
-
-data/processed/predictions.csv
-
-```
-
-
-
-The prediction file retains the original input columns and adds three fields:
-
-
+**Output.** `data/processed/predictions.csv` (overwritten on each run) with the input columns plus:
 
 | Column | Description |
 | --- | --- |
-| `subscription_probability` | Predicted probability that the customer subscribes |
-| `prediction` | Binary prediction: `1` or `0` |
-| `prediction_label` | Human-readable prediction: `yes` or `no` |
+| `subscription_probability` | Predicted probability of subscribing |
+| `prediction` | `1` if probability ≥ threshold, else `0` |
+| `prediction_label` | `yes` or `no` |
 
+The threshold (`0.20`) is read from `models/metadata.json`, not hard-coded in the prediction logic.
 
-
-
-The output directory is created automatically if it does not exist.
-
-
-
-### Classification Threshold
-
-
-
-The prediction threshold is loaded from `models/metadata.json`.
-
-
-
-The current configured threshold is **0.20**:
-
-
-
-- Probability greater than or equal to `0.20` → `yes` (`1`).
-
-- Probability below `0.20` → `no` (`0`).
-
-
-
-The threshold is stored in metadata rather than hard-coded into the prediction logic.
-
-
-
-## Testing
-
-
-
-Run the complete test suite:
-
-
+## Testing and CI
 
 ```bash
-
-uv run pytest -v
-
+uv run pytest -q
 ```
 
+Tests cover target validation, the feature contract, the chronological split (including that no test set is scored), preprocessing and imputation edge cases (`NaN`, `pd.NA`, nullable dtypes, all-missing columns), input validation, metric arithmetic (FPR/FNR, undefined groups), artifact and metadata compatibility, time-window evaluation, and inference with the saved model. They need neither the raw dataset nor network access.
 
+GitHub Actions (`.github/workflows/tests.yml`) installs dependencies from `uv.lock` and runs the suite on every push to `main` and on pull requests.
 
-The tests cover binary-label validation, model evaluation, missing-value imputation, input validation, metadata validation, preprocessing, and loading the saved model.
-
-
-
-At the latest recorded verification, **53 tests passed**.
-
-
-
-The batch prediction output was also checked across all 45,211 dataset records:
-
-
-
-- Output shape: `45,211 × 20`.
-
-- Missing values in the output: `0`.
-
-- Prediction labels were consistent with the configured threshold.
-
-- Threshold mismatches: `0`.
-
-
-
-These checks verify pipeline execution and prediction consistency. They do not, by themselves, establish the model's predictive accuracy.
-
-
-
-## Model Artifacts
-
-
-
-The prediction workflow expects the following files:
-
-
+## Project Structure
 
 ```text
-
-models/
-
-├── xgboost_pipeline.joblib
-
-└── metadata.json
-
+xgboost-bank-marketing/
+├── .github/workflows/tests.yml   # CI: pytest on a clean install
+├── data/
+│   ├── raw/                      # bank-full.csv (not committed)
+│   └── processed/                # experiment outputs and predictions
+├── examples/
+│   └── sample_customers.csv      # 5 synthetic clients for a quick demo
+├── models/
+│   ├── xgboost_pipeline.joblib   # fitted preprocessing + XGBoost pipeline
+│   └── metadata.json             # versioned contract, settings, metrics
+├── notebooks/                    # EDA and modeling notebooks
+├── scripts/
+│   ├── train_model.py
+│   ├── compare_models.py
+│   ├── evaluate_time_windows.py
+│   ├── optimize_threshold.py
+│   ├── predict.py
+│   └── analyze_*.py              # dataset, error and group-error analysis
+├── src/
+│   ├── feature_contract.py       # single source of the 11 features
+│   ├── data_loader.py            # CSV loading, target validation
+│   ├── preprocessor.py
+│   ├── model_trainer.py
+│   ├── model_evaluator.py
+│   └── data_analyzer.py
+├── tests/
+├── pyproject.toml
+└── uv.lock
 ```
 
-
-
-- `xgboost_pipeline.joblib` contains the fitted preprocessing and prediction pipeline.
-
-- `metadata.json` contains inference configuration, including the classification threshold and recorded validation metrics.
-
-
-
-Both artifacts must be available before running batch prediction. Running the training script regenerates these artifacts.
-
-
-
 ## Limitations and Future Improvements
-
-
 
 Known limitations:
 
 - **Predictive, not causal.** The model estimates which clients are more likely to subscribe given pre-campaign features. It does not measure the effect of contacting a client, and feature associations should not be read as causes of subscription.
 - **No customer identifier.** `bank-full.csv` has no client ID column, so repeated records for the same client cannot be detected or grouped. A group-aware split is not possible; the same client could appear in both the training and validation portions, which may make validation metrics optimistic.
+- **No independent holdout.** All reported numbers are development validation. A final estimate needs new campaign data.
+- **Threshold not optimized.** `0.20` is a fixed working value; contact capacity and FP/FN costs have not been provided.
+- **Profile-field availability unconfirmed.** Freshness of `age`, `job`, `balance` and similar fields in a production source still needs confirmation.
 
-Potential extensions include:
+Potential extensions:
 
-
-
-- Selecting the classification threshold systematically using validation data and an explicit business objective.
-
-
-- Evaluating class imbalance handling strategies.
-
-- Tracking experiments and model configurations.
-
-- Adding feature importance analysis and model interpretability.
-
-- Adding a REST API for inference.
-
-
+- Choose the threshold from contact capacity or explicit FP/FN costs, and calibrate probabilities so they transfer across periods.
+- Centralize seed, threshold, and paths in one versioned config.
+- Add data quality checks before training (schema, ranges, duplicates, target distribution) and drift monitoring.
+- Add feature importance and model interpretability.
 
 ## License
-
-
 
 No license has been specified for this project yet. Add an appropriate license before granting others explicit permission to use, modify, or distribute the code.
