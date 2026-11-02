@@ -1,5 +1,7 @@
 # XGBoost Bank Marketing
 
+[![tests](https://github.com/JiaHui2005/xgboost-bank-marketing/actions/workflows/tests.yml/badge.svg)](https://github.com/JiaHui2005/xgboost-bank-marketing/actions/workflows/tests.yml)
+
 Predicts, **before a marketing campaign starts**, which bank clients are most likely to subscribe to a term deposit, using the UCI Bank Marketing dataset. The focus is on doing the ML engineering honestly: a feature contract that matches the prediction point, chronological validation with no test-set reuse, a versioned model artifact checked at inference time, and tests that run in CI.
 
 **Key findings**
@@ -198,7 +200,7 @@ Before splitting, `train_model.py` and `compare_models.py` run a data check (`ch
 | `uv run python scripts/evaluate_time_windows.py` | Both models across 5 expanding time windows | `data/processed/time_window_metrics.csv`, `data/processed/time_window_summary.csv` |
 | `uv run python scripts/optimize_threshold.py` | Threshold trade-off table on validation (descriptive; does not change the threshold) | `data/processed/threshold_comparison.csv` |
 
-`analyze_prediction_errors.py` and `analyze_group_error_rates.py` break validation errors down by feature value at the same `0.20` threshold.
+`analyze_prediction_errors.py` and `analyze_group_error_rates.py` break validation errors down by feature value at the same `0.20` threshold. Groups with fewer than 30 actual positives or negatives are marked `low_support`, since their rates are too noisy to compare (for example `job = unknown`, with 17 positives). Group differences are descriptive and are not a fairness or causal analysis.
 
 `train_model.py` overwrites the checked-in model artifact. Retrain after changing the feature contract or training settings, since batch prediction rejects a mismatched artifact.
 
@@ -307,6 +309,8 @@ Potential extensions:
 
 - Choose the threshold from contact capacity or explicit FP/FN costs, and calibrate probabilities so they transfer across periods.
 - Monitor feature drift and per-cohort performance in production.
+- Log each inference batch (model version, input schema, missing rates, latency, errors) without client-level personal data.
+- Wrap training, evaluation and prediction in one CLI with a shared config argument; today each task has its own script.
 - Add feature importance and model interpretability.
 
 ## License

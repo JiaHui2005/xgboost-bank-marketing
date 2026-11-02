@@ -5,6 +5,8 @@ from scripts.compare_models import build_models, load_and_split_data
 from src.config import PROCESSED_DIR, THRESHOLD
 
 OUTPUT_PATH = PROCESSED_DIR / "group_error_rates.csv"
+# Below this many actual positives or negatives, FNR/FPR are too noisy to compare.
+MIN_CLASS_SUPPORT = 30
 
 CATEGORICAL_FEATURES = [
     "job",
@@ -34,6 +36,10 @@ def add_group_error_rates(summary: pd.DataFrame) -> pd.DataFrame:
     summary["missed_positive_share"] = (
         summary["false_negative"]
         / summary["actual_positive"].replace(0, pd.NA)
+    )
+    summary["low_support"] = (
+        (summary["actual_positive"] < MIN_CLASS_SUPPORT)
+        | (actual_negative < MIN_CLASS_SUPPORT)
     )
     return summary
 
@@ -126,6 +132,7 @@ def main():
                     "false_positive",
                     "false_positive_rate",
                     "false_positive_fraction_within_group",
+                    "low_support",
                 ]
             ].to_string(
                 index=False,
@@ -133,6 +140,11 @@ def main():
             )
         )
 
+    print(
+        f"\nlow_support = fewer than {MIN_CLASS_SUPPORT} actual positives or "
+        "negatives; do not compare its rates. Group differences are "
+        "descriptive, not evidence of causal effects or fairness."
+    )
     print(f"\nSaved results to: {OUTPUT_PATH}")
 
 
